@@ -1,311 +1,272 @@
-const express = require('express');
-const path = require('path');
+const crypto = require("crypto");
+const express = require("express");
+const cookieParser = require("cookie-parser");
+const cors = require("cors");
+const bcrypt = require("bcryptjs");
+const path = require("path");
+
+const { readDb, writeDb } = require("./src/db");
+const { encrypt, decrypt } = require("./src/crypto");
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const COOKIE_NAME = "vs_session";
+const isProd = process.env.NODE_ENV === "production";
 
-app.use('/static', express.static(path.join(__dirname, 'public')));
+app.set("trust proxy", 1);
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname, "public")));
 
-// URL du site à surveiller
-const TARGET_URL = process.env.TARGET_URL || 'https://electrotechnique-snvq.onrender.com';
-const SITE_LOGO = process.env.SITE_LOGO || `${TARGET_URL}/img/logo.png`;
-
-// Intervalle de vérification (ms) - 60 secondes
-const CHECK_INTERVAL = 60 * 1000;
-
-// Seuil de latence (ms) au-delà duquel on considère le site "dégradé"
-const SLOW_THRESHOLD = 4000;
-
-let status = {
-  state: 'unknown', // 'operational' | 'degraded' | 'down' | 'unknown'
-  httpCode: null,
-  responseTime: null,
-  lastChecked: null,
-  message: 'Vérification en cours...',
-  history: [] // historique des derniers checks
-};
-
-async function checkSite() {
-  const start = Date.now();
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // timeout 10s
-
-    const res = await fetch(TARGET_URL, {
-      method: 'GET',
-      signal: controller.signal,
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; StatusMonitor/1.0; +https://render.com)'
-      }
+// ────────────────────────────────────────────────────────────────────────────
+// Amorçage : crée le compte admin initial s'il n'existe pas encore
+// ────────────────────────────────────────────────────────────────────────────
+function ensureAdminSeed() {
+  const db = readDb();
+  const hasAdmin = db.users.some((u) => u.role === "admin");
+  if (!hasAdmin) {
+    const username = process.env.ADMIN_USERNAME || "admin";
+    const password = process.env.ADMIN_PASSWORD || "admin123";
+    db.users.push({
+      id: crypto.randomUUID(),
+      username,
+      passwordHash: bcrypt.hashSync(password, 10),
+      role: "admin",
+      firstName: "Admin",
+      lastName: "",
+      className: "",
     });
-
-    clearTimeout(timeout);
-    const responseTime = Date.now() - start;
-
-    let state, message;
-    if (res.ok) {
-      if (responseTime > SLOW_THRESHOLD) {
-        state = 'degraded';
-        message = `Le site répond mais lentement (${responseTime}ms)`;
-      } else {
-        state = 'operational';
-        message = 'Le site fonctionne normalement';
-      }
-    } else if (res.status >= 500) {
-      state = 'down';
-      message = `Erreur serveur (code ${res.status})`;
-    } else if (res.status === 403) {
-      // Le site répond mais bloque l'accès (ex: page de maintenance)
-      const body = await res.text().catch(() => '');
-      if (/maintenance/i.test(body)) {
-        state = 'down';
-        message = 'Le site est en mode maintenance';
-      } else {
-        state = 'degraded';
-        message = `Accès refusé (code 403)`;
-      }
-    } else {
-      state = 'degraded';
-      message = `Réponse inattendue (code ${res.status})`;
-    }
-
-    status = {
-      state,
-      httpCode: res.status,
-      responseTime,
-      lastChecked: new Date().toISOString(),
-      message,
-      history: updateHistory(state)
-    };
-  } catch (err) {
-    const responseTime = Date.now() - start;
-    status = {
-      state: 'down',
-      httpCode: null,
-      responseTime,
-      lastChecked: new Date().toISOString(),
-      message: err.name === 'AbortError' ? 'Le site ne répond pas (timeout)' : `Le site est injoignable (${err.message})`,
-      history: updateHistory('down')
-    };
+    writeDb(db);
+    console.log(`🔑 Compte admin créé — identifiant: "${username}" / mot de passe: "${password}"`);
+    console.log("   ⚠️  Change ce mot de passe (variables ADMIN_USERNAME / ADMIN_PASSWORD).");
   }
 }
+ensureAdminSeed();
 
-function updateHistory(state) {
-  const newHistory = [...status.history, { state, time: new Date().toISOString() }];
-  return newHistory.slice(-50); // garde les 50 derniers checks
+// ────────────────────────────────────────────────────────────────────────────
+// Auth helpers
+// ────────────────────────────────────────────────────────────────────────────
+function setSessionCookie(res, userId) {
+  const token = encrypt({ userId });
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: "lax",
+    maxAge: 180 * 24 * 60 * 60 * 1000,
+  });
 }
 
-// Première vérification au démarrage, puis à intervalle régulier
-checkSite();
-setInterval(checkSite, CHECK_INTERVAL);
+function getCurrentUser(req) {
+  const token = req.cookies?.[COOKIE_NAME];
+  if (!token) return null;
+  const data = decrypt(token);
+  if (!data) return null;
+  const db = readDb();
+  return db.users.find((u) => u.id === data.userId) || null;
+}
 
-app.get('/api/status', (req, res) => {
-  res.json({ target: TARGET_URL, ...status });
+function publicUser(u) {
+  if (!u) return null;
+  const { passwordHash, ...rest } = u;
+  return rest;
+}
+
+function requireAuth(req, res, next) {
+  const user = getCurrentUser(req);
+  if (!user) return res.status(401).json({ error: "Non connecté." });
+  req.user = user;
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  const user = getCurrentUser(req);
+  if (!user || user.role !== "admin") return res.status(403).json({ error: "Accès refusé." });
+  req.user = user;
+  next();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Auth : login / logout / me
+// ────────────────────────────────────────────────────────────────────────────
+app.post("/api/auth/login", (req, res) => {
+  const { username, password } = req.body ?? {};
+  if (!username || !password) {
+    return res.status(400).json({ error: "Identifiant et mot de passe requis." });
+  }
+
+  const db = readDb();
+  const user = db.users.find((u) => u.username.toLowerCase() === String(username).trim().toLowerCase());
+
+  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
+    return res.status(401).json({ error: "Identifiant ou mot de passe incorrect." });
+  }
+
+  setSessionCookie(res, user.id);
+  res.json({ success: true, user: publicUser(user) });
 });
 
-app.get('/', (req, res) => {
-  res.send(renderPage());
+app.post("/api/auth/logout", (req, res) => {
+  res.clearCookie(COOKIE_NAME);
+  res.json({ success: true });
 });
 
-function renderPage() {
-  return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Statut — Électrotechnique</title>
-<style>
-  :root {
-    --green: #2ecc71;
-    --orange: #f5a623;
-    --red: #e74c3c;
-    --gray: #6b7280;
-    --accent: #0F6C7C;
-    --text: #eef2f4;
-    --muted: #a9b4bb;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: var(--text);
-  }
-  body {
-    background:
-      linear-gradient(180deg, rgba(5,6,10,0.55) 0%, rgba(5,6,10,0.85) 55%, rgba(5,6,10,0.97) 100%),
-      url('/static/background.jpg') center center / cover no-repeat fixed;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
-  .card {
-    background: rgba(12, 16, 22, 0.72);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 18px;
-    padding: 36px;
-    max-width: 480px;
-    width: 100%;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-  }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 6px;
-  }
-  .brand img {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    object-fit: contain;
-    background: rgba(255,255,255,0.04);
-    padding: 4px;
-  }
-  .brand h1 {
-    font-size: 19px;
-    margin: 0;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-  }
-  .target-link {
-    display: inline-block;
-    color: var(--accent);
-    font-size: 13px;
-    text-decoration: none;
-    margin-bottom: 24px;
-    word-break: break-all;
-    border-bottom: 1px solid transparent;
-    transition: border-color .2s;
-  }
-  .target-link:hover { border-color: var(--accent); }
-
-  .status-row {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 22px;
-    border-radius: 14px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06);
-    margin-bottom: 22px;
-  }
-  .dot-wrap { position: relative; width: 20px; height: 20px; flex-shrink: 0; }
-  .dot {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    box-shadow: 0 0 14px currentColor;
-  }
-  .dot.operational { background: var(--green); color: var(--green); }
-  .dot.degraded { background: var(--orange); color: var(--orange); }
-  .dot.down { background: var(--red); color: var(--red); }
-  .dot.unknown { background: var(--gray); color: var(--gray); }
-  .dot.operational::after {
-    content: '';
-    position: absolute; inset: 0;
-    border-radius: 50%;
-    background: var(--green);
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0% { transform: scale(1); opacity: 0.6; }
-    100% { transform: scale(2.4); opacity: 0; }
-  }
-  .status-text { font-size: 18px; font-weight: 700; }
-  .status-label.operational { color: var(--green); }
-  .status-label.degraded { color: var(--orange); }
-  .status-label.down { color: var(--red); }
-  .status-label.unknown { color: var(--gray); }
-  .message { font-size: 13px; color: var(--muted); margin-top: 2px; }
-
-  .details { font-size: 13.5px; color: var(--muted); line-height: 1.7; margin-bottom: 22px; }
-  .details div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .details div:last-child { border-bottom: none; }
-  .details span:last-child { color: var(--text); font-weight: 500; }
-
-  .visit-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    padding: 13px;
-    border-radius: 10px;
-    background: var(--accent);
-    color: #fff;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 14px;
-    transition: filter .2s, transform .2s;
-  }
-  .visit-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
-
-  .refresh-note { text-align: center; font-size: 11.5px; color: var(--muted); margin-top: 18px; opacity: 0.8; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <div class="brand">
-      <img src="${SITE_LOGO}" alt="Logo" onerror="this.style.display='none'">
-      <h1>Électrotechnique</h1>
-    </div>
-    <a class="target-link" href="${TARGET_URL}" target="_blank" rel="noopener" id="target">${TARGET_URL}</a>
-
-    <div class="status-row">
-      <div class="dot-wrap"><div class="dot unknown" id="dot"></div></div>
-      <div>
-        <div class="status-text status-label unknown" id="statusLabel">Vérification...</div>
-        <div class="message" id="message"></div>
-      </div>
-    </div>
-
-    <div class="details">
-      <div><span>Code HTTP</span><span id="httpCode">-</span></div>
-      <div><span>Temps de réponse</span><span id="responseTime">-</span></div>
-      <div><span>Dernière vérification</span><span id="lastChecked">-</span></div>
-    </div>
-
-    <a class="visit-btn" href="${TARGET_URL}" target="_blank" rel="noopener">Visiter le site →</a>
-
-    <div class="refresh-note">Actualisation automatique toutes les 30 secondes</div>
-  </div>
-
-<script>
-const labels = {
-  operational: 'Opérationnel',
-  degraded: 'Dégradé',
-  down: 'Hors ligne',
-  unknown: 'Inconnu'
-};
-
-async function refresh() {
-  try {
-    const res = await fetch('/api/status');
-    const data = await res.json();
-
-    document.getElementById('dot').className = 'dot ' + data.state;
-    document.getElementById('statusLabel').className = 'status-text status-label ' + data.state;
-    document.getElementById('statusLabel').textContent = labels[data.state] || data.state;
-    document.getElementById('message').textContent = data.message || '';
-    document.getElementById('httpCode').textContent = data.httpCode ?? 'N/A';
-    document.getElementById('responseTime').textContent = data.responseTime != null ? data.responseTime + ' ms' : 'N/A';
-    document.getElementById('lastChecked').textContent = data.lastChecked ? new Date(data.lastChecked).toLocaleString('fr-FR') : 'N/A';
-  } catch (e) {
-    document.getElementById('message').textContent = 'Erreur de récupération du statut';
-  }
-}
-
-refresh();
-setInterval(refresh, 30000);
-</script>
-</body>
-</html>`;
-}
-
-app.listen(PORT, () => {
-  console.log(`Status page running on port ${PORT}, monitoring ${TARGET_URL}`);
+app.get("/api/auth/me", (req, res) => {
+  const user = getCurrentUser(req);
+  if (!user) return res.status(401).json({ error: "Non connecté." });
+  res.json({ success: true, user: publicUser(user) });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// Élève : réglages établissement + emploi du temps de sa classe
+// ────────────────────────────────────────────────────────────────────────────
+app.get("/api/settings", (req, res) => {
+  const db = readDb();
+  res.json({ success: true, settings: db.settings });
+});
+
+app.get("/api/timetable", requireAuth, (req, res) => {
+  const db = readDb();
+  const lessons = db.lessons.filter((l) => l.className === req.user.className);
+  res.json({ success: true, lessons, settings: db.settings, user: publicUser(req.user) });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Admin : réglages établissement (nom / logo)
+// ────────────────────────────────────────────────────────────────────────────
+app.put("/api/admin/settings", requireAdmin, (req, res) => {
+  const { schoolName, logoUrl } = req.body ?? {};
+  const db = readDb();
+  if (typeof schoolName === "string") db.settings.schoolName = schoolName.trim();
+  if (typeof logoUrl === "string") db.settings.logoUrl = logoUrl.trim();
+  writeDb(db);
+  res.json({ success: true, settings: db.settings });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Admin : gestion des utilisateurs (élèves)
+// ────────────────────────────────────────────────────────────────────────────
+app.get("/api/admin/users", requireAdmin, (req, res) => {
+  const db = readDb();
+  res.json({ success: true, users: db.users.map(publicUser) });
+});
+
+app.post("/api/admin/users", requireAdmin, (req, res) => {
+  const { username, password, firstName, lastName, className, role } = req.body ?? {};
+  if (!username || !password || !firstName || !className) {
+    return res.status(400).json({ error: "Identifiant, mot de passe, prénom et classe sont requis." });
+  }
+
+  const db = readDb();
+  const exists = db.users.some((u) => u.username.toLowerCase() === String(username).trim().toLowerCase());
+  if (exists) return res.status(409).json({ error: "Cet identifiant existe déjà." });
+
+  const newUser = {
+    id: crypto.randomUUID(),
+    username: String(username).trim(),
+    passwordHash: bcrypt.hashSync(password, 10),
+    role: role === "admin" ? "admin" : "student",
+    firstName: String(firstName).trim(),
+    lastName: String(lastName ?? "").trim(),
+    className: String(className).trim(),
+  };
+  db.users.push(newUser);
+  writeDb(db);
+  res.json({ success: true, user: publicUser(newUser) });
+});
+
+app.put("/api/admin/users/:id", requireAdmin, (req, res) => {
+  const db = readDb();
+  const user = db.users.find((u) => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: "Utilisateur introuvable." });
+
+  const { username, password, firstName, lastName, className } = req.body ?? {};
+  if (username) user.username = String(username).trim();
+  if (password) user.passwordHash = bcrypt.hashSync(password, 10);
+  if (firstName) user.firstName = String(firstName).trim();
+  if (lastName !== undefined) user.lastName = String(lastName).trim();
+  if (className) user.className = String(className).trim();
+
+  writeDb(db);
+  res.json({ success: true, user: publicUser(user) });
+});
+
+app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
+  const db = readDb();
+  if (req.params.id === req.user.id) {
+    return res.status(400).json({ error: "Tu ne peux pas supprimer ton propre compte." });
+  }
+  db.users = db.users.filter((u) => u.id !== req.params.id);
+  writeDb(db);
+  res.json({ success: true });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Admin : gestion de l'emploi du temps (cours par classe)
+// ────────────────────────────────────────────────────────────────────────────
+app.get("/api/admin/lessons", requireAdmin, (req, res) => {
+  const db = readDb();
+  res.json({ success: true, lessons: db.lessons });
+});
+
+app.post("/api/admin/lessons", requireAdmin, (req, res) => {
+  const { className, day, start, end, subject, teacher, room, color } = req.body ?? {};
+  if (!className || day === undefined || !start || !end || !subject) {
+    return res.status(400).json({ error: "Classe, jour, horaires et matière sont requis." });
+  }
+
+  const db = readDb();
+  const lesson = {
+    id: crypto.randomUUID(),
+    className: String(className).trim(),
+    day: parseInt(day, 10),
+    start,
+    end,
+    subject: String(subject).trim(),
+    teacher: String(teacher ?? "").trim(),
+    room: String(room ?? "").trim(),
+    color: color || "#4f46e5",
+  };
+  db.lessons.push(lesson);
+  writeDb(db);
+  res.json({ success: true, lesson });
+});
+
+app.put("/api/admin/lessons/:id", requireAdmin, (req, res) => {
+  const db = readDb();
+  const lesson = db.lessons.find((l) => l.id === req.params.id);
+  if (!lesson) return res.status(404).json({ error: "Cours introuvable." });
+
+  const { className, day, start, end, subject, teacher, room, color } = req.body ?? {};
+  if (className) lesson.className = String(className).trim();
+  if (day !== undefined) lesson.day = parseInt(day, 10);
+  if (start) lesson.start = start;
+  if (end) lesson.end = end;
+  if (subject) lesson.subject = String(subject).trim();
+  if (teacher !== undefined) lesson.teacher = String(teacher).trim();
+  if (room !== undefined) lesson.room = String(room).trim();
+  if (color) lesson.color = color;
+
+  writeDb(db);
+  res.json({ success: true, lesson });
+});
+
+app.delete("/api/admin/lessons/:id", requireAdmin, (req, res) => {
+  const db = readDb();
+  db.lessons = db.lessons.filter((l) => l.id !== req.params.id);
+  writeDb(db);
+  res.json({ success: true });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pages
+// ────────────────────────────────────────────────────────────────────────────
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "admin.html"));
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🟢 Serveur démarré sur le port ${PORT}`));

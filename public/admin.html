@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Administration — Valenca Studio</title>
+<link rel="icon" href="/logo.png" />
+<meta name="theme-color" content="#18181a" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+
+<!-- ─────────────── CONNEXION ADMIN ─────────────── -->
+<main id="login-screen" class="screen">
+  <div class="login-card">
+    <img src="/logo.png" alt="Valenca Studio" class="login-logo" />
+    <h1>Administration</h1>
+    <p class="login-sub">Espace réservé à la gestion de l'établissement.</p>
+    <form id="login-form" autocomplete="off">
+      <label class="field">
+        <span>Identifiant admin</span>
+        <input type="text" id="username" required />
+      </label>
+      <label class="field">
+        <span>Mot de passe</span>
+        <input type="password" id="password" required />
+      </label>
+      <button type="submit" id="login-btn">Se connecter</button>
+      <p id="login-error" class="error-msg" hidden></p>
+    </form>
+    <p class="login-hint">Espace élève : <a href="/">retourner à l'accueil</a></p>
+  </div>
+</main>
+
+<!-- ─────────────── PANNEAU ADMIN ─────────────── -->
+<div id="admin-screen" class="screen admin-layout" hidden>
+
+  <header class="admin-header">
+    <div class="admin-header-left">
+      <img src="/logo.png" alt="" class="admin-logo" />
+      <span>Administration</span>
+    </div>
+    <nav class="admin-tabs">
+      <button class="admin-tab active" data-tab="settings">Établissement</button>
+      <button class="admin-tab" data-tab="users">Élèves</button>
+      <button class="admin-tab" data-tab="lessons">Emploi du temps</button>
+    </nav>
+    <button id="logout-btn" class="logout-btn">Se déconnecter</button>
+  </header>
+
+  <main class="admin-main">
+
+    <!-- Onglet établissement -->
+    <section id="tab-settings" class="admin-panel">
+      <h2>Établissement</h2>
+      <form id="settings-form" class="admin-form">
+        <label class="field">
+          <span>Nom de l'établissement</span>
+          <input type="text" id="school-name-input" required />
+        </label>
+        <label class="field">
+          <span>URL du logo</span>
+          <input type="text" id="logo-url-input" placeholder="/logo.png" />
+        </label>
+        <button type="submit">Enregistrer</button>
+        <p id="settings-msg" class="success-msg" hidden></p>
+      </form>
+    </section>
+
+    <!-- Onglet élèves -->
+    <section id="tab-users" class="admin-panel" hidden>
+      <h2>Comptes élèves</h2>
+
+      <form id="user-form" class="admin-form inline-form">
+        <input type="text" id="u-firstName" placeholder="Prénom" required />
+        <input type="text" id="u-lastName" placeholder="Nom" />
+        <input type="text" id="u-className" placeholder="Classe (ex. Terminale A)" required />
+        <input type="text" id="u-username" placeholder="Identifiant" required />
+        <input type="password" id="u-password" placeholder="Mot de passe" required />
+        <button type="submit">Ajouter</button>
+      </form>
+      <p id="user-msg" class="error-msg" hidden></p>
+
+      <table class="admin-table">
+        <thead>
+          <tr><th>Nom</th><th>Classe</th><th>Identifiant</th><th></th></tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </section>
+
+    <!-- Onglet emploi du temps -->
+    <section id="tab-lessons" class="admin-panel" hidden>
+      <h2>Emploi du temps</h2>
+
+      <form id="lesson-form" class="admin-form inline-form">
+        <input type="text" id="l-className" placeholder="Classe" required />
+        <select id="l-day">
+          <option value="0">Lundi</option>
+          <option value="1">Mardi</option>
+          <option value="2">Mercredi</option>
+          <option value="3">Jeudi</option>
+          <option value="4">Vendredi</option>
+          <option value="5">Samedi</option>
+        </select>
+        <input type="time" id="l-start" required />
+        <input type="time" id="l-end" required />
+        <input type="text" id="l-subject" placeholder="Matière" required />
+        <input type="text" id="l-teacher" placeholder="Professeur" />
+        <input type="text" id="l-room" placeholder="Salle" />
+        <input type="color" id="l-color" value="#4f46e5" />
+        <button type="submit">Ajouter</button>
+      </form>
+      <p id="lesson-msg" class="error-msg" hidden></p>
+
+      <label class="field" style="max-width:260px;">
+        <span>Filtrer par classe</span>
+        <input type="text" id="lesson-filter" placeholder="Toutes les classes" />
+      </label>
+
+      <table class="admin-table">
+        <thead>
+          <tr><th>Classe</th><th>Jour</th><th>Horaires</th><th>Matière</th><th>Prof.</th><th>Salle</th><th></th></tr>
+        </thead>
+        <tbody id="lessons-tbody"></tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<script src="/admin.js"></script>
+</body>
+</html>

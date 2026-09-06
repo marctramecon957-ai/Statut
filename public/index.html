@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Valenca Studio — Emploi du temps</title>
+<link rel="icon" href="/logo.png" />
+<link rel="apple-touch-icon" href="/logo.png" />
+<meta name="theme-color" content="#18181a" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<!-- ─────────────── SPLASH / CHARGEMENT (optimisé mobile) ─────────────── -->
+<div id="splash-screen" class="screen splash-screen">
+  <div class="splash-inner">
+    <img src="/logo.png" alt="Valenca Studio" class="splash-logo" />
+    <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+    <p class="splash-text">Chargement de ton emploi du temps…</p>
+  </div>
+</div>
+
+<!-- ─────────────── ÉCRAN DE CONNEXION ─────────────── -->
+<main id="login-screen" class="screen" hidden>
+  <div class="login-card">
+    <img src="/logo.png" alt="Valenca Studio" class="login-logo" />
+    <h1>Valenca Studio</h1>
+    <p class="login-sub">Connecte-toi pour voir ton emploi du temps.</p>
+
+    <form id="login-form" autocomplete="off">
+      <label class="field">
+        <span>Identifiant</span>
+        <input type="text" id="username" required />
+      </label>
+      <label class="field">
+        <span>Mot de passe</span>
+        <input type="password" id="password" required />
+      </label>
+      <button type="submit" id="login-btn">Se connecter</button>
+      <p id="login-error" class="error-msg" hidden></p>
+    </form>
+  </div>
+</main>
+
+<!-- ─────────────── ÉCRAN EMPLOI DU TEMPS ─────────────── -->
+<div id="app-screen" class="screen app-layout" hidden>
+
+  <aside class="sidebar">
+    <div class="school-card">
+      <img id="school-logo" class="school-logo" src="/logo.png" alt="" />
+      <div class="school-name" id="school-name">—</div>
+    </div>
+
+    <div class="student-card">
+      <div class="student-avatar" id="student-avatar">—</div>
+      <div>
+        <div class="student-name" id="student-name">—</div>
+        <div class="student-class" id="student-class">—</div>
+      </div>
+    </div>
+
+    <div class="view-toggle">
+      <button class="view-btn active" data-view="week">Semaine</button>
+      <button class="view-btn" data-view="day">Jour</button>
+    </div>
+
+    <button id="logout-btn" class="logout-btn">Se déconnecter</button>
+  </aside>
+
+  <section class="main-panel">
+    <div id="day-tabs" class="day-tabs" hidden></div>
+    <div id="timetable-container" class="timetable-container"></div>
+  </section>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
