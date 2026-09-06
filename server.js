@@ -1,272 +1,200 @@
-const crypto = require("crypto");
-const express = require("express");
-const cookieParser = require("cookie-parser");
-const cors = require("cors");
-const bcrypt = require("bcryptjs");
-const path = require("path");
+require('dotenv').config();
+const path = require('path');
+const express = require('express');
+const session = require('express-session');
+const SQLiteStore = require('connect-sqlite3')(session);
+const bcrypt = require('bcryptjs');
+const db = require('./db/database');
 
-const { readDb, writeDb } = require("./src/db");
-const { encrypt, decrypt } = require("./src/crypto");
+// S'assure que le compte admin par defaut existe
+require('./db/seed');
 
 const app = express();
-const COOKIE_NAME = "vs_session";
-const isProd = process.env.NODE_ENV === "production";
+const PORT = process.env.PORT || 3000;
 
-app.set("trust proxy", 1);
-app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ────────────────────────────────────────────────────────────────────────────
-// Amorçage : crée le compte admin initial s'il n'existe pas encore
-// ────────────────────────────────────────────────────────────────────────────
-function ensureAdminSeed() {
-  const db = readDb();
-  const hasAdmin = db.users.some((u) => u.role === "admin");
-  if (!hasAdmin) {
-    const username = process.env.ADMIN_USERNAME || "admin";
-    const password = process.env.ADMIN_PASSWORD || "admin123";
-    db.users.push({
-      id: crypto.randomUUID(),
-      username,
-      passwordHash: bcrypt.hashSync(password, 10),
-      role: "admin",
-      firstName: "Admin",
-      lastName: "",
-      className: "",
-    });
-    writeDb(db);
-    console.log(`🔑 Compte admin créé — identifiant: "${username}" / mot de passe: "${password}"`);
-    console.log("   ⚠️  Change ce mot de passe (variables ADMIN_USERNAME / ADMIN_PASSWORD).");
-  }
-}
-ensureAdminSeed();
+app.use(
+  session({
+    store: new SQLiteStore({ db: 'sessions.sqlite', dir: path.join(__dirname, 'db') }),
+    secret: process.env.SESSION_SECRET || 'valenca-studio-secret-change-moi',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 jours
+      secure: process.env.NODE_ENV === 'production',
+    },
+  })
+);
 
-// ────────────────────────────────────────────────────────────────────────────
-// Auth helpers
-// ────────────────────────────────────────────────────────────────────────────
-function setSessionCookie(res, userId) {
-  const token = encrypt({ userId });
-  res.cookie(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    maxAge: 180 * 24 * 60 * 60 * 1000,
-  });
-}
-
-function getCurrentUser(req) {
-  const token = req.cookies?.[COOKIE_NAME];
-  if (!token) return null;
-  const data = decrypt(token);
-  if (!data) return null;
-  const db = readDb();
-  return db.users.find((u) => u.id === data.userId) || null;
-}
-
-function publicUser(u) {
-  if (!u) return null;
-  const { passwordHash, ...rest } = u;
-  return rest;
-}
-
+// ---------- Middlewares ----------
 function requireAuth(req, res, next) {
-  const user = getCurrentUser(req);
-  if (!user) return res.status(401).json({ error: "Non connecté." });
-  req.user = user;
+  if (!req.session.user) return res.status(401).json({ error: 'Non authentifie' });
   next();
 }
 
 function requireAdmin(req, res, next) {
-  const user = getCurrentUser(req);
-  if (!user || user.role !== "admin") return res.status(403).json({ error: "Accès refusé." });
-  req.user = user;
+  if (!req.session.user || req.session.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Acces reserve a l\'administrateur' });
+  }
   next();
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Auth : login / logout / me
-// ────────────────────────────────────────────────────────────────────────────
-app.post("/api/auth/login", (req, res) => {
-  const { username, password } = req.body ?? {};
-  if (!username || !password) {
-    return res.status(400).json({ error: "Identifiant et mot de passe requis." });
-  }
+// ---------- AUTH ----------
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Identifiants manquants' });
 
-  const db = readDb();
-  const user = db.users.find((u) => u.username.toLowerCase() === String(username).trim().toLowerCase());
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+  if (!user) return res.status(401).json({ error: 'Identifiants invalides' });
 
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
-    return res.status(401).json({ error: "Identifiant ou mot de passe incorrect." });
-  }
+  const ok = bcrypt.compareSync(password, user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'Identifiants invalides' });
 
-  setSessionCookie(res, user.id);
-  res.json({ success: true, user: publicUser(user) });
+  req.session.user = { id: user.id, username: user.username, role: user.role };
+
+  res.json({
+    success: true,
+    mustChangePassword: !!user.must_change_password,
+    role: user.role,
+  });
 });
 
-app.post("/api/auth/logout", (req, res) => {
-  res.clearCookie(COOKIE_NAME);
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(() => res.json({ success: true }));
+});
+
+app.get('/api/me', (req, res) => {
+  if (!req.session.user) return res.json({ user: null });
+  res.json({ user: req.session.user });
+});
+
+app.post('/api/change-password', requireAuth, (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Le nouveau mot de passe doit contenir au moins 6 caracteres' });
+  }
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.user.id);
+  if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+
+  if (!user.must_change_password) {
+    const ok = bcrypt.compareSync(currentPassword || '', user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Mot de passe actuel incorrect' });
+  }
+
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(hash, user.id);
   res.json({ success: true });
 });
 
-app.get("/api/auth/me", (req, res) => {
-  const user = getCurrentUser(req);
-  if (!user) return res.status(401).json({ error: "Non connecté." });
-  res.json({ success: true, user: publicUser(user) });
+// ---------- ADMIN : GESTION DES UTILISATEURS ----------
+app.get('/api/admin/users', requireAdmin, (req, res) => {
+  const users = db.prepare('SELECT id, username, role, must_change_password, created_at FROM users').all();
+  res.json(users);
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Élève : réglages établissement + emploi du temps de sa classe
-// ────────────────────────────────────────────────────────────────────────────
-app.get("/api/settings", (req, res) => {
-  const db = readDb();
-  res.json({ success: true, settings: db.settings });
+app.post('/api/admin/users', requireAdmin, (req, res) => {
+  const { username, password, role } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Champs manquants' });
+
+  const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (exists) return res.status(409).json({ error: 'Ce nom d\'utilisateur existe deja' });
+
+  const hash = bcrypt.hashSync(password, 10);
+  const info = db
+    .prepare('INSERT INTO users (username, password_hash, role, must_change_password) VALUES (?, ?, ?, 1)')
+    .run(username, hash, role === 'admin' ? 'admin' : 'eleve');
+
+  res.json({ success: true, id: info.lastInsertRowid });
 });
 
-app.get("/api/timetable", requireAuth, (req, res) => {
-  const db = readDb();
-  const lessons = db.lessons.filter((l) => l.className === req.user.className);
-  res.json({ success: true, lessons, settings: db.settings, user: publicUser(req.user) });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Admin : réglages établissement (nom / logo)
-// ────────────────────────────────────────────────────────────────────────────
-app.put("/api/admin/settings", requireAdmin, (req, res) => {
-  const { schoolName, logoUrl } = req.body ?? {};
-  const db = readDb();
-  if (typeof schoolName === "string") db.settings.schoolName = schoolName.trim();
-  if (typeof logoUrl === "string") db.settings.logoUrl = logoUrl.trim();
-  writeDb(db);
-  res.json({ success: true, settings: db.settings });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Admin : gestion des utilisateurs (élèves)
-// ────────────────────────────────────────────────────────────────────────────
-app.get("/api/admin/users", requireAdmin, (req, res) => {
-  const db = readDb();
-  res.json({ success: true, users: db.users.map(publicUser) });
-});
-
-app.post("/api/admin/users", requireAdmin, (req, res) => {
-  const { username, password, firstName, lastName, className, role } = req.body ?? {};
-  if (!username || !password || !firstName || !className) {
-    return res.status(400).json({ error: "Identifiant, mot de passe, prénom et classe sont requis." });
-  }
-
-  const db = readDb();
-  const exists = db.users.some((u) => u.username.toLowerCase() === String(username).trim().toLowerCase());
-  if (exists) return res.status(409).json({ error: "Cet identifiant existe déjà." });
-
-  const newUser = {
-    id: crypto.randomUUID(),
-    username: String(username).trim(),
-    passwordHash: bcrypt.hashSync(password, 10),
-    role: role === "admin" ? "admin" : "student",
-    firstName: String(firstName).trim(),
-    lastName: String(lastName ?? "").trim(),
-    className: String(className).trim(),
-  };
-  db.users.push(newUser);
-  writeDb(db);
-  res.json({ success: true, user: publicUser(newUser) });
-});
-
-app.put("/api/admin/users/:id", requireAdmin, (req, res) => {
-  const db = readDb();
-  const user = db.users.find((u) => u.id === req.params.id);
-  if (!user) return res.status(404).json({ error: "Utilisateur introuvable." });
-
-  const { username, password, firstName, lastName, className } = req.body ?? {};
-  if (username) user.username = String(username).trim();
-  if (password) user.passwordHash = bcrypt.hashSync(password, 10);
-  if (firstName) user.firstName = String(firstName).trim();
-  if (lastName !== undefined) user.lastName = String(lastName).trim();
-  if (className) user.className = String(className).trim();
-
-  writeDb(db);
-  res.json({ success: true, user: publicUser(user) });
-});
-
-app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
-  const db = readDb();
-  if (req.params.id === req.user.id) {
-    return res.status(400).json({ error: "Tu ne peux pas supprimer ton propre compte." });
-  }
-  db.users = db.users.filter((u) => u.id !== req.params.id);
-  writeDb(db);
+app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  if (id === req.session.user.id) return res.status(400).json({ error: 'Impossible de supprimer votre propre compte' });
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
   res.json({ success: true });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Admin : gestion de l'emploi du temps (cours par classe)
-// ────────────────────────────────────────────────────────────────────────────
-app.get("/api/admin/lessons", requireAdmin, (req, res) => {
-  const db = readDb();
-  res.json({ success: true, lessons: db.lessons });
-});
-
-app.post("/api/admin/lessons", requireAdmin, (req, res) => {
-  const { className, day, start, end, subject, teacher, room, color } = req.body ?? {};
-  if (!className || day === undefined || !start || !end || !subject) {
-    return res.status(400).json({ error: "Classe, jour, horaires et matière sont requis." });
+app.post('/api/admin/users/:id/reset-password', requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'Mot de passe provisoire trop court (6 caracteres min.)' });
   }
-
-  const db = readDb();
-  const lesson = {
-    id: crypto.randomUUID(),
-    className: String(className).trim(),
-    day: parseInt(day, 10),
-    start,
-    end,
-    subject: String(subject).trim(),
-    teacher: String(teacher ?? "").trim(),
-    room: String(room ?? "").trim(),
-    color: color || "#4f46e5",
-  };
-  db.lessons.push(lesson);
-  writeDb(db);
-  res.json({ success: true, lesson });
-});
-
-app.put("/api/admin/lessons/:id", requireAdmin, (req, res) => {
-  const db = readDb();
-  const lesson = db.lessons.find((l) => l.id === req.params.id);
-  if (!lesson) return res.status(404).json({ error: "Cours introuvable." });
-
-  const { className, day, start, end, subject, teacher, room, color } = req.body ?? {};
-  if (className) lesson.className = String(className).trim();
-  if (day !== undefined) lesson.day = parseInt(day, 10);
-  if (start) lesson.start = start;
-  if (end) lesson.end = end;
-  if (subject) lesson.subject = String(subject).trim();
-  if (teacher !== undefined) lesson.teacher = String(teacher).trim();
-  if (room !== undefined) lesson.room = String(room).trim();
-  if (color) lesson.color = color;
-
-  writeDb(db);
-  res.json({ success: true, lesson });
-});
-
-app.delete("/api/admin/lessons/:id", requireAdmin, (req, res) => {
-  const db = readDb();
-  db.lessons = db.lessons.filter((l) => l.id !== req.params.id);
-  writeDb(db);
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(hash, id);
   res.json({ success: true });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Pages
-// ────────────────────────────────────────────────────────────────────────────
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
+// ---------- MATIERES ----------
+app.get('/api/matieres', requireAuth, (req, res) => {
+  res.json(db.prepare('SELECT * FROM matieres ORDER BY nom').all());
 });
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+app.post('/api/admin/matieres', requireAdmin, (req, res) => {
+  const { nom } = req.body;
+  if (!nom || !nom.trim()) return res.status(400).json({ error: 'Nom de matiere requis' });
+  try {
+    const info = db.prepare('INSERT INTO matieres (nom) VALUES (?)').run(nom.trim());
+    res.json({ success: true, id: info.lastInsertRowid });
+  } catch (e) {
+    res.status(409).json({ error: 'Cette matiere existe deja' });
+  }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🟢 Serveur démarré sur le port ${PORT}`));
+app.delete('/api/admin/matieres/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM matieres WHERE id = ?').run(Number(req.params.id));
+  res.json({ success: true });
+});
+
+// ---------- EMPLOI DU TEMPS ----------
+app.get('/api/creneaux', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.jour, c.heure_debut, c.heure_fin, c.salle, c.professeur, c.matiere_id, m.nom AS matiere_nom
+       FROM creneaux c
+       LEFT JOIN matieres m ON m.id = c.matiere_id
+       ORDER BY c.heure_debut`
+    )
+    .all();
+  res.json(rows);
+});
+
+app.post('/api/admin/creneaux', requireAdmin, (req, res) => {
+  const { jour, heure_debut, heure_fin, matiere_id, salle, professeur } = req.body;
+  if (!jour || !heure_debut || !heure_fin) {
+    return res.status(400).json({ error: 'Jour et horaires requis' });
+  }
+  const info = db
+    .prepare(
+      `INSERT INTO creneaux (jour, heure_debut, heure_fin, matiere_id, salle, professeur)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(jour, heure_debut, heure_fin, matiere_id || null, salle || '', professeur || '');
+  res.json({ success: true, id: info.lastInsertRowid });
+});
+
+app.put('/api/admin/creneaux/:id', requireAdmin, (req, res) => {
+  const { jour, heure_debut, heure_fin, matiere_id, salle, professeur } = req.body;
+  db.prepare(
+    `UPDATE creneaux SET jour=?, heure_debut=?, heure_fin=?, matiere_id=?, salle=?, professeur=? WHERE id=?`
+  ).run(jour, heure_debut, heure_fin, matiere_id || null, salle || '', professeur || '', Number(req.params.id));
+  res.json({ success: true });
+});
+
+app.delete('/api/admin/creneaux/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM creneaux WHERE id = ?').run(Number(req.params.id));
+  res.json({ success: true });
+});
+
+// ---------- Pages ----------
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Serveur Valenca Studio - Emploi du temps demarre sur le port ${PORT}`);
+});

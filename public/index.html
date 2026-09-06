@@ -2,79 +2,170 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Valenca Studio — Emploi du temps</title>
-<link rel="icon" href="/logo.png" />
-<link rel="apple-touch-icon" href="/logo.png" />
-<meta name="theme-color" content="#18181a" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Valenca Studio — Emploi du temps 1MELEC</title>
+<link rel="icon" href="/assets/logo.png" />
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
 
-<!-- ─────────────── SPLASH / CHARGEMENT (optimisé mobile) ─────────────── -->
-<div id="splash-screen" class="screen splash-screen">
-  <div class="splash-inner">
-    <img src="/logo.png" alt="Valenca Studio" class="splash-logo" />
-    <div class="splash-bar"><div class="splash-bar-fill"></div></div>
-    <p class="splash-text">Chargement de ton emploi du temps…</p>
+<header class="topbar">
+  <div class="brand">
+    <img src="/assets/logo.png" alt="Valenca Studio" class="brand-logo" />
+    <div class="brand-text">
+      <span class="brand-title">Valenca Studio</span>
+      <span class="brand-sub">Lycée Albert Londres — 1MELEC</span>
+    </div>
   </div>
-</div>
-
-<!-- ─────────────── ÉCRAN DE CONNEXION ─────────────── -->
-<main id="login-screen" class="screen" hidden>
-  <div class="login-card">
-    <img src="/logo.png" alt="Valenca Studio" class="login-logo" />
-    <h1>Valenca Studio</h1>
-    <p class="login-sub">Connecte-toi pour voir ton emploi du temps.</p>
-
-    <form id="login-form" autocomplete="off">
-      <label class="field">
-        <span>Identifiant</span>
-        <input type="text" id="username" required />
-      </label>
-      <label class="field">
-        <span>Mot de passe</span>
-        <input type="password" id="password" required />
-      </label>
-      <button type="submit" id="login-btn">Se connecter</button>
-      <p id="login-error" class="error-msg" hidden></p>
-    </form>
+  <div id="userBar" class="user-bar hidden">
+    <span id="userLabel"></span>
+    <button id="btnChangePwd" class="btn btn-ghost">Mot de passe</button>
+    <button id="btnLogout" class="btn btn-ghost">Déconnexion</button>
   </div>
+</header>
+
+<main id="app">
+
+  <!-- LOGIN -->
+  <section id="view-login" class="view">
+    <div class="card card-center">
+      <img src="/assets/logo.png" alt="logo" class="login-logo" />
+      <h1>Connexion</h1>
+      <p class="muted">Emploi du temps — 1MELEC</p>
+      <form id="loginForm">
+        <label>Nom d'utilisateur</label>
+        <input type="text" id="loginUsername" autocomplete="username" required />
+        <label>Mot de passe</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required />
+        <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
+      </form>
+      <p id="loginError" class="error hidden"></p>
+    </div>
+  </section>
+
+  <!-- CHANGEMENT MOT DE PASSE OBLIGATOIRE -->
+  <section id="view-force-change" class="view hidden">
+    <div class="card card-center">
+      <h1>Nouveau mot de passe</h1>
+      <p class="muted">C'est votre première connexion. Choisissez un nouveau mot de passe pour continuer.</p>
+      <form id="forceChangeForm">
+        <label>Nouveau mot de passe</label>
+        <input type="password" id="fcNewPassword" minlength="6" required />
+        <label>Confirmer le mot de passe</label>
+        <input type="password" id="fcConfirmPassword" minlength="6" required />
+        <button type="submit" class="btn btn-primary btn-block">Valider</button>
+      </form>
+      <p id="fcError" class="error hidden"></p>
+    </div>
+  </section>
+
+  <!-- CHANGEMENT MOT DE PASSE VOLONTAIRE -->
+  <section id="view-change-pwd" class="view hidden">
+    <div class="card card-center">
+      <h1>Changer mon mot de passe</h1>
+      <form id="changePwdForm">
+        <label>Mot de passe actuel</label>
+        <input type="password" id="cpCurrent" required />
+        <label>Nouveau mot de passe</label>
+        <input type="password" id="cpNew" minlength="6" required />
+        <button type="submit" class="btn btn-primary btn-block">Mettre à jour</button>
+        <button type="button" id="cpCancel" class="btn btn-ghost btn-block">Annuler</button>
+      </form>
+      <p id="cpError" class="error hidden"></p>
+      <p id="cpSuccess" class="success hidden"></p>
+    </div>
+  </section>
+
+  <!-- EMPLOI DU TEMPS -->
+  <section id="view-schedule" class="view hidden">
+    <div class="schedule-header">
+      <h1>Emploi du temps — 1MELEC</h1>
+      <a id="btnAdminLink" class="btn btn-ghost hidden" href="#admin">Espace admin</a>
+    </div>
+    <div class="table-wrap">
+      <table id="scheduleTable" class="schedule-table">
+        <thead>
+          <tr id="scheduleHeadRow"></tr>
+        </thead>
+        <tbody id="scheduleBody"></tbody>
+      </table>
+    </div>
+    <div id="scheduleMobile" class="schedule-mobile"></div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="view-admin" class="view hidden">
+    <div class="schedule-header">
+      <h1>Espace administrateur</h1>
+      <a id="btnBackToSchedule" class="btn btn-ghost" href="#schedule">Voir l'emploi du temps</a>
+    </div>
+
+    <div class="admin-grid">
+
+      <div class="card">
+        <h2>Matières</h2>
+        <form id="matiereForm" class="inline-form">
+          <input type="text" id="matiereNom" placeholder="Nom de la matière" required />
+          <button type="submit" class="btn btn-primary">Ajouter</button>
+        </form>
+        <ul id="matiereList" class="simple-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Utilisateurs</h2>
+        <form id="userForm" class="inline-form-col">
+          <input type="text" id="newUsername" placeholder="Nom d'utilisateur" required />
+          <input type="text" id="newPassword" placeholder="Mot de passe provisoire" required />
+          <select id="newRole">
+            <option value="eleve">Élève</option>
+            <option value="admin">Administrateur</option>
+          </select>
+          <button type="submit" class="btn btn-primary">Créer le compte</button>
+        </form>
+        <ul id="userList" class="simple-list"></ul>
+      </div>
+
+      <div class="card admin-card-wide">
+        <h2>Créneaux de l'emploi du temps</h2>
+        <form id="creneauForm" class="creneau-form">
+          <select id="creneauJour" required>
+            <option value="Lundi">Lundi</option>
+            <option value="Mardi">Mardi</option>
+            <option value="Mercredi">Mercredi</option>
+            <option value="Jeudi">Jeudi</option>
+            <option value="Vendredi">Vendredi</option>
+            <option value="Samedi">Samedi</option>
+          </select>
+          <select id="creneauDebut"></select>
+          <select id="creneauFin"></select>
+          <select id="creneauMatiere">
+            <option value="">— Aucune matière —</option>
+          </select>
+          <input type="text" id="creneauSalle" placeholder="Salle (optionnel)" />
+          <input type="text" id="creneauProf" placeholder="Professeur (optionnel)" />
+          <button type="submit" class="btn btn-primary">Ajouter le créneau</button>
+        </form>
+        <input type="hidden" id="creneauEditId" />
+        <div class="table-wrap">
+          <table class="schedule-table">
+            <thead>
+              <tr>
+                <th>Jour</th><th>Début</th><th>Fin</th><th>Matière</th><th>Salle</th><th>Professeur</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="creneauAdminBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
 </main>
 
-<!-- ─────────────── ÉCRAN EMPLOI DU TEMPS ─────────────── -->
-<div id="app-screen" class="screen app-layout" hidden>
-
-  <aside class="sidebar">
-    <div class="school-card">
-      <img id="school-logo" class="school-logo" src="/logo.png" alt="" />
-      <div class="school-name" id="school-name">—</div>
-    </div>
-
-    <div class="student-card">
-      <div class="student-avatar" id="student-avatar">—</div>
-      <div>
-        <div class="student-name" id="student-name">—</div>
-        <div class="student-class" id="student-class">—</div>
-      </div>
-    </div>
-
-    <div class="view-toggle">
-      <button class="view-btn active" data-view="week">Semaine</button>
-      <button class="view-btn" data-view="day">Jour</button>
-    </div>
-
-    <button id="logout-btn" class="logout-btn">Se déconnecter</button>
-  </aside>
-
-  <section class="main-panel">
-    <div id="day-tabs" class="day-tabs" hidden></div>
-    <div id="timetable-container" class="timetable-container"></div>
-  </section>
-</div>
+<footer class="footer">
+  <span>Valenca Studio © 2026 — Lycée Albert Londres</span>
+</footer>
 
 <script src="/app.js"></script>
 </body>

@@ -1,7 +1,7 @@
 services:
   - type: web
-    name: valenca-emploi-du-temps
-    runtime: node
+    name: valenca-studio-emploi-du-temps
+    env: node
     plan: free
     buildCommand: npm install
     startCommand: npm start
@@ -13,15 +13,8 @@ services:
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
-        generateValue: true
-    # ⚠️ Sans disque persistant, les comptes et l'emploi du temps créés
-    # depuis l'espace admin restent en place tant que le service tourne,
-    # mais sont PERDUS à chaque redéploiement ou redémarrage (le plan Free
-    # de Render ne conserve pas le système de fichiers entre deux builds).
-    # Pour les garder définitivement, décommente ce bloc (disque payant à
-    # partir du plan Starter) ET ajoute la variable DB_PATH=/data/db.json
-    # dans l'onglet Environment de Render.
-    # disk:
-    #   name: data
-    #   mountPath: /data
-    #   sizeGB: 1
+        sync: false
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/db
+      sizeGB: 1

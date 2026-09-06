@@ -1,120 +1,115 @@
-# 📅 Valenca Studio — Emploi du temps
+# Valenca Studio — Emploi du temps 1MELEC
 
-Application web d'emploi du temps scolaire **100% autonome** (aucune connexion à Pronote) :
-tu crées toi-même les comptes élèves et le planning depuis un espace admin.
+Application web (mobile + ordinateur) pour consulter et gérer l'emploi du temps
+de la classe **1MELEC** du **Lycée Albert Londres**.
 
----
+- Emploi du temps consultable de 8h à 18h
+- Matières créées librement depuis l'espace admin (sans couleur imposée)
+- Espace administrateur protégé par identifiants
+- Comptes élèves avec mot de passe provisoire : au premier login, l'utilisateur
+  doit choisir un nouveau mot de passe avant d'accéder à l'emploi du temps
+- Thème visuel repris du logo fourni (fond sombre / crème)
 
-## 🧱 Stack technique
+## 1. Installation en local
 
-- **Backend** : Node.js + Express
-- **Authentification** : mots de passe hashés (bcrypt), session via cookie chiffré
-- **Données** : fichier JSON simple (voir note sur la persistance plus bas)
-- **Frontend** : HTML / CSS / JS vanilla, écran de chargement (splash) optimisé mobile
-- **Hébergement** : Render (Web Service)
-- **Code source** : GitHub
-
----
-
-## 🚀 Déploiement
-
-### 1. GitHub
-
-```bash
-cd app
-git init
-git add .
-git commit -m "Première version"
-git remote add origin https://github.com/TON-PSEUDO/valenca-emploi-du-temps.git
-git branch -M main
-git push -u origin main
-```
-
-### 2. Render
-
-1. [dashboard.render.com](https://dashboard.render.com) → **New +** → **Web Service**.
-2. Connecte ton dépôt GitHub `valenca-emploi-du-temps`.
-3. Render lit `render.yaml` automatiquement (build `npm install`, start `npm start`,
-   variables `SESSION_SECRET` et `ADMIN_PASSWORD` générées automatiquement).
-4. Onglet **Environment** → note bien le mot de passe admin généré (ou fixe le tien).
-5. **Create Web Service**. Après 2-3 minutes, ton app est en ligne sur
-   `https://valenca-emploi-du-temps.onrender.com`.
-
-### 3. ⚠️ Persistance des données
-
-Par défaut (plan Free), Render **ne conserve pas** le système de fichiers entre deux
-redéploiements : si tu crées des élèves et un planning puis que tu redéploies (ou que le
-service redémarre après une longue inactivité), **tout est réinitialisé**.
-
-Deux options :
-- **Simple / gratuit** : accepte cette limite en test, ou recrée les comptes après chaque
-  déploiement.
-- **Définitif** : passe au plan **Starter** de Render, ajoute un disque persistant
-  (décommente le bloc `disk:` dans `render.yaml`), et ajoute la variable d'environnement
-  `DB_PATH=/data/db.json`. Les données survivent alors à tous les redéploiements.
-
----
-
-## 🔑 Première connexion
-
-Un compte **admin** est créé automatiquement au premier démarrage du serveur, avec les
-identifiants définis dans les variables d'environnement `ADMIN_USERNAME` / `ADMIN_PASSWORD`
-(par défaut `admin` / `admin123` en local — **change-les en production**).
-
-1. Va sur `/admin` (ex. `https://ton-app.onrender.com/admin`).
-2. Connecte-toi avec le compte admin.
-3. Onglet **Établissement** : renseigne le nom de l'établissement (le logo Valenca Studio
-   est déjà configuré par défaut, tu peux le remplacer par une autre URL d'image si besoin).
-4. Onglet **Élèves** : crée un compte par élève (prénom, nom, classe, identifiant, mot de
-   passe).
-5. Onglet **Emploi du temps** : ajoute les cours un par un (classe, jour, horaires, matière,
-   professeur, salle, couleur). Tous les élèves d'une même classe partagent automatiquement
-   le même planning.
-
-Chaque élève se connecte ensuite sur la page d'accueil (`/`) avec son identifiant et voit :
-nom, prénom, classe, logo + nom de l'établissement, et son emploi du temps en vue semaine ou
-jour.
-
----
-
-## 💻 Lancer en local
+Prérequis : [Node.js](https://nodejs.org/) version 18 ou plus.
 
 ```bash
 npm install
-cp .env.example .env      # personnalise SESSION_SECRET / ADMIN_USERNAME / ADMIN_PASSWORD
+cp .env.example .env
 npm start
 ```
 
-- Espace élève : [http://localhost:3000](http://localhost:3000)
-- Espace admin : [http://localhost:3000/admin](http://localhost:3000/admin)
+Le site est ensuite disponible sur : http://localhost:3000
 
----
+Un compte administrateur est créé automatiquement au premier démarrage :
+- **Utilisateur** : `admin`
+- **Mot de passe** : `ChangeMoi123!`
 
-## 📂 Structure du projet
+⚠️ Connectez-vous avec ce compte et changez immédiatement le mot de passe
+(vous y serez invité automatiquement à la première connexion).
+
+Vous pouvez personnaliser ces identifiants avant le premier démarrage en
+modifiant `ADMIN_USERNAME` et `ADMIN_PASSWORD` dans le fichier `.env`.
+
+## 2. Utilisation
+
+### En tant qu'administrateur
+1. Connectez-vous avec le compte admin.
+2. Cliquez sur **"Espace admin"** en haut de l'emploi du temps.
+3. Ajoutez vos **matières** (aucune couleur n'est appliquée automatiquement).
+4. Créez les **créneaux** (jour, heure de début, heure de fin, matière, salle,
+   professeur) — les horaires proposés vont de 8h à 18h.
+5. Créez des **comptes utilisateurs** (élèves) avec un nom d'utilisateur et un
+   mot de passe provisoire. Vous pouvez aussi réinitialiser le mot de passe
+   d'un compte existant à tout moment (bouton "Réinitialiser").
+
+### En tant qu'élève
+1. Se connecter avec le nom d'utilisateur et le mot de passe provisoire fourni
+   par l'administrateur.
+2. Un écran demande automatiquement de choisir un nouveau mot de passe.
+3. Une fois validé, l'emploi du temps de la classe s'affiche (vue tableau sur
+   ordinateur, vue liste par jour sur mobile).
+
+## 3. Mettre le projet sur GitHub
+
+```bash
+cd emploi-du-temps
+git init
+git add .
+git commit -m "Initial commit - Valenca Studio emploi du temps"
+git branch -M main
+git remote add origin https://github.com/VOTRE-UTILISATEUR/VOTRE-DEPOT.git
+git push -u origin main
+```
+
+(Remplacez l'URL par celle de votre propre dépôt GitHub, créé au préalable sur
+github.com.)
+
+## 4. Déployer sur Render
+
+1. Allez sur [render.com](https://render.com) et connectez votre compte GitHub.
+2. Cliquez sur **New +** → **Web Service**.
+3. Sélectionnez le dépôt GitHub que vous venez de créer.
+4. Render détecte automatiquement le fichier `render.yaml` fourni dans ce
+   projet (Blueprint). Sinon, configurez manuellement :
+   - **Build Command** : `npm install`
+   - **Start Command** : `npm start`
+   - **Environment** : `Node`
+5. Renseignez les variables d'environnement demandées :
+   - `SESSION_SECRET` (générée automatiquement si vous utilisez le Blueprint)
+   - `ADMIN_USERNAME`
+   - `ADMIN_PASSWORD`
+6. Important : pour que les données (emploi du temps, comptes) soient conservées
+   entre les redéploiements, ajoutez un **disque persistant** (Render → onglet
+   "Disks") monté sur le dossier `db/` — c'est déjà prévu dans `render.yaml`.
+7. Cliquez sur **Create Web Service**. Render installe les dépendances et
+   démarre le site automatiquement. Une URL du type
+   `https://votre-service.onrender.com` vous est fournie.
+
+## 5. Structure du projet
 
 ```
-app/
-├── server.js               # Serveur Express (auth, routes admin, routes élève)
-├── src/
-│   ├── db.js                # Petite base de données JSON sur disque
-│   └── crypto.js            # Chiffrement AES-256-GCM du cookie de session
+emploi-du-temps/
+├── server.js              # Serveur Express (API + pages)
+├── db/
+│   ├── database.js        # Connexion SQLite + création des tables
+│   └── seed.js            # Création du compte admin par défaut
 ├── public/
-│   ├── index.html            # Espace élève (splash mobile + connexion + planning)
-│   ├── admin.html            # Espace admin (élèves + planning + réglages)
-│   ├── style.css             # Thème partagé (identité Valenca Studio)
-│   ├── admin.css             # Styles additionnels de l'espace admin
-│   ├── app.js                 # Logique frontend élève
-│   ├── admin.js                # Logique frontend admin
-│   └── logo.png                # Logo Valenca Studio
-├── render.yaml
+│   ├── index.html         # Page unique (login, emploi du temps, admin)
+│   ├── style.css          # Thème visuel (repris du logo)
+│   ├── app.js             # Logique front-end
+│   └── assets/logo.png    # Logo Valenca Studio
 ├── package.json
+├── render.yaml            # Configuration de déploiement Render
 └── .env.example
 ```
 
-## 🔒 Sécurité
+## 6. Notes techniques
 
-- Mots de passe hashés avec **bcrypt**, jamais stockés en clair.
-- Cookie de session **httpOnly**, chiffré (AES-256-GCM), `Secure` en production.
-- Définis un `SESSION_SECRET` long et aléatoire en production (généré automatiquement par
-  `render.yaml`).
-- Change le mot de passe admin par défaut dès le premier déploiement.
+- Base de données : SQLite (fichier local, pas de service externe à payer).
+- Mots de passe stockés sous forme hachée (`bcryptjs`), jamais en clair.
+- Sessions utilisateurs stockées côté serveur (`express-session` +
+  `connect-sqlite3`), cookie valable 7 jours.
+- Aucune couleur n'est associée automatiquement aux matières, comme demandé :
+  seul le nom de la matière est affiché.
