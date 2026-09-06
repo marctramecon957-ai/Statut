@@ -437,6 +437,10 @@ document.getElementById('creneauForm').addEventListener('submit', async (e) => {
   }
 });
 
+document.getElementById('btnDownload').addEventListener('click', () => {
+  window.print();
+});
+
 // Lien retour vers l'emploi du temps depuis l'admin
 document.getElementById('btnBackToSchedule').addEventListener('click', (e) => {
   e.preventDefault();

@@ -102,7 +102,20 @@ form input:focus, form select:focus { outline: none; border-color: var(--cream);
 
 /* ---------- Schedule ---------- */
 .schedule-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.schedule-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* ---------- Impression / export PDF ---------- */
+@media print {
+  .topbar, .footer, .schedule-actions, .schedule-mobile { display: none !important; }
+  body { background: #fff; color: #000; }
+  main#app { padding: 0; max-width: none; }
+  .table-wrap { display: block !important; overflow: visible; }
+  .schedule-table { min-width: 0; width: 100%; }
+  .schedule-table th, .schedule-table td { border: 1px solid #999; color: #000; }
+  .schedule-table th { background: #eee; }
+  .slot { background: #f4f4f4; }
+  .slot-detail { color: #333; }
+}
 .table-wrap { overflow-x: auto; margin-top: 16px; }
 .schedule-table { width: 100%; border-collapse: collapse; min-width: 700px; }
 .schedule-table th, .schedule-table td {
