@@ -1,9 +1,13 @@
 const express = require('express');
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use('/static', express.static(path.join(__dirname, 'public')));
+
 // URL du site à surveiller
 const TARGET_URL = process.env.TARGET_URL || 'https://electrotechnique-snvq.onrender.com';
+const SITE_LOGO = process.env.SITE_LOGO || `${TARGET_URL}/img/logo.png`;
 
 // Intervalle de vérification (ms) - 60 secondes
 const CHECK_INTERVAL = 60 * 1000;
@@ -109,86 +113,164 @@ function renderPage() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Statut du site</title>
+<title>Statut — Électrotechnique</title>
 <style>
   :root {
-    --green: #22c55e;
-    --orange: #f59e0b;
-    --red: #ef4444;
-    --gray: #9ca3af;
-    --bg: #0f172a;
-    --card: #1e293b;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
+    --green: #2ecc71;
+    --orange: #f5a623;
+    --red: #e74c3c;
+    --gray: #6b7280;
+    --accent: #0F6C7C;
+    --text: #eef2f4;
+    --muted: #a9b4bb;
   }
   * { box-sizing: border-box; }
-  body {
+  html, body {
     margin: 0;
+    min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg);
     color: var(--text);
+  }
+  body {
+    background:
+      linear-gradient(180deg, rgba(5,6,10,0.55) 0%, rgba(5,6,10,0.85) 55%, rgba(5,6,10,0.97) 100%),
+      url('/static/background.jpg') center center / cover no-repeat fixed;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    padding: 20px;
+    padding: 24px;
   }
   .card {
-    background: var(--card);
-    border-radius: 16px;
-    padding: 32px;
+    background: rgba(12, 16, 22, 0.72);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 36px;
     max-width: 480px;
     width: 100%;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   }
-  h1 { font-size: 20px; margin: 0 0 4px 0; }
-  .target { color: var(--muted); font-size: 14px; margin-bottom: 24px; word-break: break-all; }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .brand img {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: contain;
+    background: rgba(255,255,255,0.04);
+    padding: 4px;
+  }
+  .brand h1 {
+    font-size: 19px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .target-link {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 13px;
+    text-decoration: none;
+    margin-bottom: 24px;
+    word-break: break-all;
+    border-bottom: 1px solid transparent;
+    transition: border-color .2s;
+  }
+  .target-link:hover { border-color: var(--accent); }
+
   .status-row {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 20px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.03);
-    margin-bottom: 20px;
+    gap: 16px;
+    padding: 22px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 22px;
   }
+  .dot-wrap { position: relative; width: 20px; height: 20px; flex-shrink: 0; }
   .dot {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    flex-shrink: 0;
-    box-shadow: 0 0 12px currentColor;
+    box-shadow: 0 0 14px currentColor;
   }
   .dot.operational { background: var(--green); color: var(--green); }
   .dot.degraded { background: var(--orange); color: var(--orange); }
   .dot.down { background: var(--red); color: var(--red); }
   .dot.unknown { background: var(--gray); color: var(--gray); }
-  .status-text { font-size: 17px; font-weight: 600; }
+  .dot.operational::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(2.4); opacity: 0; }
+  }
+  .status-text { font-size: 18px; font-weight: 700; }
   .status-label.operational { color: var(--green); }
   .status-label.degraded { color: var(--orange); }
   .status-label.down { color: var(--red); }
   .status-label.unknown { color: var(--gray); }
-  .details { font-size: 14px; color: var(--muted); line-height: 1.6; }
-  .details div { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-  .refresh-note { text-align: center; font-size: 12px; color: var(--muted); margin-top: 20px; }
+  .message { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  .details { font-size: 13.5px; color: var(--muted); line-height: 1.7; margin-bottom: 22px; }
+  .details div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .details div:last-child { border-bottom: none; }
+  .details span:last-child { color: var(--text); font-weight: 500; }
+
+  .visit-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 13px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    transition: filter .2s, transform .2s;
+  }
+  .visit-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+
+  .refresh-note { text-align: center; font-size: 11.5px; color: var(--muted); margin-top: 18px; opacity: 0.8; }
 </style>
 </head>
 <body>
   <div class="card">
-    <h1>📡 Statut du service</h1>
-    <div class="target" id="target">Chargement...</div>
+    <div class="brand">
+      <img src="${SITE_LOGO}" alt="Logo" onerror="this.style.display='none'">
+      <h1>Électrotechnique</h1>
+    </div>
+    <a class="target-link" href="${TARGET_URL}" target="_blank" rel="noopener" id="target">${TARGET_URL}</a>
+
     <div class="status-row">
-      <div class="dot unknown" id="dot"></div>
+      <div class="dot-wrap"><div class="dot unknown" id="dot"></div></div>
       <div>
         <div class="status-text status-label unknown" id="statusLabel">Vérification...</div>
-        <div style="font-size:13px; color: var(--muted);" id="message"></div>
+        <div class="message" id="message"></div>
       </div>
     </div>
+
     <div class="details">
       <div><span>Code HTTP</span><span id="httpCode">-</span></div>
       <div><span>Temps de réponse</span><span id="responseTime">-</span></div>
       <div><span>Dernière vérification</span><span id="lastChecked">-</span></div>
     </div>
+
+    <a class="visit-btn" href="${TARGET_URL}" target="_blank" rel="noopener">Visiter le site →</a>
+
     <div class="refresh-note">Actualisation automatique toutes les 30 secondes</div>
   </div>
 
@@ -205,7 +287,6 @@ async function refresh() {
     const res = await fetch('/api/status');
     const data = await res.json();
 
-    document.getElementById('target').textContent = data.target;
     document.getElementById('dot').className = 'dot ' + data.state;
     document.getElementById('statusLabel').className = 'status-text status-label ' + data.state;
     document.getElementById('statusLabel').textContent = labels[data.state] || data.state;
