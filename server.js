@@ -12,6 +12,11 @@ require('./db/seed');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Necessaire derriere le proxy HTTPS de Render pour que les cookies de session
+// marques "secure" soient correctement geres.
+app.set('trust proxy', 1);
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
