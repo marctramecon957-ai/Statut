@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Valenca Studio — Emploi du temps 1MELEC</title>
 <link rel="icon" href="/assets/logo.png" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#1b1a19" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Emploi du temps" />
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -81,7 +88,7 @@
     <div class="schedule-header">
       <h1>Emploi du temps — 1MELEC</h1>
       <div class="schedule-actions">
-        <button id="btnDownload" class="btn btn-ghost">Télécharger (PDF)</button>
+        <button id="btnInstall" class="btn btn-ghost hidden">📲 Installer sur mon téléphone</button>
         <a id="btnAdminLink" class="btn btn-ghost hidden" href="#admin">Espace admin</a>
       </div>
     </div>
@@ -163,6 +170,15 @@
 
     </div>
   </section>
+
+  <!-- MODALE INSTRUCTIONS INSTALLATION (iOS) -->
+  <div id="installModal" class="modal-overlay hidden">
+    <div class="modal-card card">
+      <h2>Installer l'application</h2>
+      <p id="installInstructions" class="muted"></p>
+      <button id="installModalClose" class="btn btn-primary btn-block">Compris</button>
+    </div>
+  </div>
 
 </main>
 

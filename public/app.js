@@ -437,8 +437,59 @@ document.getElementById('creneauForm').addEventListener('submit', async (e) => {
   }
 });
 
-document.getElementById('btnDownload').addEventListener('click', () => {
-  window.print();
+// ================= INSTALLATION SUR LE TELEPHONE (PWA) =================
+let deferredInstallPrompt = null;
+const btnInstall = document.getElementById('btnInstall');
+
+function isIos() {
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+}
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+
+if (!isStandalone()) {
+  if (isIos()) {
+    // Safari iOS n'a pas de prompt natif : on affiche le bouton avec des instructions
+    btnInstall.classList.remove('hidden');
+  } else {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      btnInstall.classList.remove('hidden');
+    });
+  }
+}
+
+btnInstall.addEventListener('click', async () => {
+  if (isIos()) {
+    document.getElementById('installInstructions').textContent =
+      "Sur iPhone, l'installation se fait depuis Safari :\n\n1. Appuyez sur le bouton Partager (le carré avec une flèche vers le haut) en bas de l'écran.\n2. Faites défiler et appuyez sur \"Sur l'écran d'accueil\".\n3. Appuyez sur \"Ajouter\".\n\nL'application apparaîtra ensuite comme une icône sur votre écran d'accueil.";
+    document.getElementById('installModal').classList.remove('hidden');
+    return;
+  }
+
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    btnInstall.classList.add('hidden');
+  }
+});
+
+document.getElementById('installModalClose').addEventListener('click', () => {
+  document.getElementById('installModal').classList.add('hidden');
+});
+
+window.addEventListener('appinstalled', () => {
+  btnInstall.classList.add('hidden');
 });
 
 // Lien retour vers l'emploi du temps depuis l'admin
