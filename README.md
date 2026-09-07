@@ -3,11 +3,15 @@
 Application web (mobile + ordinateur) pour consulter et gérer l'emploi du temps
 de la classe **1MELEC** du **Lycée Albert Londres**.
 
-- Emploi du temps consultable de 8h à 18h
+- Emploi du temps consultable de 8h à 18h, avec bascule **Semaine 1 / Semaine 2**
 - Matières créées librement depuis l'espace admin (sans couleur imposée)
 - Espace administrateur protégé par identifiants
 - Comptes élèves avec mot de passe provisoire : au premier login, l'utilisateur
   doit choisir un nouveau mot de passe avant d'accéder à l'emploi du temps
+- Connexion persistante : une fois connecté, plus besoin de se reconnecter à
+  chaque visite (session valable 1 an)
+- Écran de chargement au démarrage de l'application
+- Installable sur téléphone comme une vraie application (PWA)
 - Thème visuel repris du logo fourni (fond sombre / crème)
 
 ## 1. Installation en local
@@ -39,7 +43,9 @@ modifiant `ADMIN_USERNAME` et `ADMIN_PASSWORD` dans le fichier `.env`.
 2. Cliquez sur **"Espace admin"** en haut de l'emploi du temps.
 3. Ajoutez vos **matières** (aucune couleur n'est appliquée automatiquement).
 4. Créez les **créneaux** (jour, heure de début, heure de fin, matière, salle,
-   professeur) — les horaires proposés vont de 8h à 18h.
+   professeur) — les horaires proposés vont de 8h à 18h. Pour chaque créneau,
+   choisissez s'il a lieu **les deux semaines**, uniquement en **semaine 1**,
+   ou uniquement en **semaine 2** (utile pour les emplois du temps alternés).
 5. Créez des **comptes utilisateurs** (élèves) avec un nom d'utilisateur et un
    mot de passe provisoire. Vous pouvez aussi réinitialiser le mot de passe
    d'un compte existant à tout moment (bouton "Réinitialiser").

@@ -29,8 +29,15 @@ CREATE TABLE IF NOT EXISTS creneaux (
   matiere_id INTEGER,
   salle TEXT,
   professeur TEXT,
+  semaine TEXT NOT NULL DEFAULT 'Toutes', -- 'S1', 'S2' ou 'Toutes' (les deux semaines)
   FOREIGN KEY (matiere_id) REFERENCES matieres(id) ON DELETE SET NULL
 );
 `);
+
+// Migration douce : ajoute la colonne "semaine" si la base existait avant son introduction
+const colonnes = db.prepare("PRAGMA table_info(creneaux)").all().map(c => c.name);
+if (!colonnes.includes('semaine')) {
+  db.exec("ALTER TABLE creneaux ADD COLUMN semaine TEXT NOT NULL DEFAULT 'Toutes'");
+}
 
 module.exports = db;

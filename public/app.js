@@ -16,6 +16,7 @@ let state = {
   user: null,
   matieres: [],
   creneaux: [],
+  semaineActive: 'S1',
 };
 
 const views = {
@@ -53,11 +54,20 @@ async function init() {
   if (!state.user) {
     showView('login');
     updateUserBar();
+    hideSplash();
     return;
   }
 
   updateUserBar();
   await loadDataAndShowSchedule();
+  hideSplash();
+}
+
+function hideSplash() {
+  const splash = document.getElementById('splashScreen');
+  if (!splash) return;
+  splash.classList.add('splash-hidden');
+  setTimeout(() => splash.remove(), 400);
 }
 
 function updateUserBar() {
@@ -81,6 +91,7 @@ async function loadDataAndShowSchedule() {
   ]);
   state.matieres = matieres;
   state.creneaux = creneaux;
+  syncWeekToggleUI();
   renderSchedule();
   showView('schedule');
 }
@@ -177,7 +188,30 @@ document.getElementById('btnAdminLink').addEventListener('click', async (e) => {
   showView('admin');
 });
 
+// ---------- TOGGLE SEMAINE 1 / SEMAINE 2 ----------
+const semaineSauvegardee = localStorage.getItem('semaineActive');
+if (semaineSauvegardee === 'S1' || semaineSauvegardee === 'S2') {
+  state.semaineActive = semaineSauvegardee;
+}
+
+document.getElementById('weekToggle').addEventListener('click', (e) => {
+  const btn = e.target.closest('.week-btn');
+  if (!btn) return;
+  state.semaineActive = btn.dataset.week;
+  localStorage.setItem('semaineActive', state.semaineActive);
+  document.querySelectorAll('.week-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderSchedule();
+});
+
+function syncWeekToggleUI() {
+  document.querySelectorAll('.week-btn').forEach(b => b.classList.toggle('active', b.dataset.week === state.semaineActive));
+}
+
 // ================= AFFICHAGE EMPLOI DU TEMPS =================
+function creneauxSemaine() {
+  return state.creneaux.filter(c => c.semaine === 'Toutes' || c.semaine === state.semaineActive);
+}
+
 function renderSchedule() {
   const heures = genererCreneauxAffichage();
   renderScheduleDesktop(heures);
@@ -186,7 +220,7 @@ function renderSchedule() {
 
 // Regroupe les créneaux existants par heure de début unique, triée
 function genererCreneauxAffichage() {
-  const set = new Set(state.creneaux.map(c => c.heure_debut));
+  const set = new Set(creneauxSemaine().map(c => c.heure_debut));
   return Array.from(set).sort();
 }
 
@@ -197,13 +231,15 @@ function renderScheduleDesktop(heuresUniques) {
   body.innerHTML = '';
 
   if (heuresUniques.length === 0) {
-    body.innerHTML = `<tr><td colspan="${JOURS.length + 1}" style="text-align:center; color:var(--cream-dim);">Aucun créneau n'a encore été ajouté.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="${JOURS.length + 1}" style="text-align:center; color:var(--cream-dim);">Aucun créneau n'a encore été ajouté pour cette semaine.</td></tr>`;
     return;
   }
 
+  const creneaux = creneauxSemaine();
+
   heuresUniques.forEach(heure => {
     const tr = document.createElement('tr');
-    const creneauxHeure = state.creneaux.filter(c => c.heure_debut === heure);
+    const creneauxHeure = creneaux.filter(c => c.heure_debut === heure);
     const fin = creneauxHeure[0] ? creneauxHeure[0].heure_fin : '';
     let html = `<td class="time-cell">${heure} - ${fin}</td>`;
 
@@ -227,9 +263,10 @@ function renderScheduleDesktop(heuresUniques) {
 function renderScheduleMobile() {
   const container = document.getElementById('scheduleMobile');
   container.innerHTML = '';
+  const creneaux = creneauxSemaine();
 
   JOURS.forEach(jour => {
-    const creneauxJour = state.creneaux
+    const creneauxJour = creneaux
       .filter(c => c.jour === jour)
       .sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
 
@@ -390,6 +427,8 @@ function renderCreneauAdminTable() {
     JOURS.indexOf(a.jour) - JOURS.indexOf(b.jour) || a.heure_debut.localeCompare(b.heure_debut)
   );
 
+  const semaineLabel = { S1: 'Semaine 1', S2: 'Semaine 2', Toutes: 'Les deux' };
+
   sorted.forEach(c => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -397,6 +436,7 @@ function renderCreneauAdminTable() {
       <td>${c.heure_debut}</td>
       <td>${c.heure_fin}</td>
       <td>${escapeHtml(c.matiere_nom || '—')}</td>
+      <td>${semaineLabel[c.semaine] || 'Les deux'}</td>
       <td>${escapeHtml(c.salle || '')}</td>
       <td>${escapeHtml(c.professeur || '')}</td>
       <td><button class="icon-btn danger" data-id="${c.id}">Supprimer</button></td>`;
@@ -415,6 +455,7 @@ document.getElementById('creneauForm').addEventListener('submit', async (e) => {
   const heure_debut = document.getElementById('creneauDebut').value;
   const heure_fin = document.getElementById('creneauFin').value;
   const matiere_id = document.getElementById('creneauMatiere').value || null;
+  const semaine = document.getElementById('creneauSemaine').value;
   const salle = document.getElementById('creneauSalle').value.trim();
   const professeur = document.getElementById('creneauProf').value.trim();
 
@@ -426,7 +467,7 @@ document.getElementById('creneauForm').addEventListener('submit', async (e) => {
   try {
     await api('/api/admin/creneaux', {
       method: 'POST',
-      body: JSON.stringify({ jour, heure_debut, heure_fin, matiere_id, salle, professeur }),
+      body: JSON.stringify({ jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine }),
     });
     document.getElementById('creneauSalle').value = '';
     document.getElementById('creneauProf').value = '';

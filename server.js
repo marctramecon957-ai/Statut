@@ -27,9 +27,11 @@ app.use(
     secret: process.env.SESSION_SECRET || 'valenca-studio-secret-change-moi',
     resave: false,
     saveUninitialized: false,
+    rolling: true, // prolonge la session a chaque visite, tant que l'utilisateur revient avant expiration
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 jours
+      maxAge: 1000 * 60 * 60 * 24 * 365, // 1 an - reste connecte tant que le navigateur/app n'est pas desinstalle
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
     },
   })
 );
@@ -158,7 +160,7 @@ app.delete('/api/admin/matieres/:id', requireAdmin, (req, res) => {
 app.get('/api/creneaux', requireAuth, (req, res) => {
   const rows = db
     .prepare(
-      `SELECT c.id, c.jour, c.heure_debut, c.heure_fin, c.salle, c.professeur, c.matiere_id, m.nom AS matiere_nom
+      `SELECT c.id, c.jour, c.heure_debut, c.heure_fin, c.salle, c.professeur, c.matiere_id, c.semaine, m.nom AS matiere_nom
        FROM creneaux c
        LEFT JOIN matieres m ON m.id = c.matiere_id
        ORDER BY c.heure_debut`
@@ -168,24 +170,26 @@ app.get('/api/creneaux', requireAuth, (req, res) => {
 });
 
 app.post('/api/admin/creneaux', requireAdmin, (req, res) => {
-  const { jour, heure_debut, heure_fin, matiere_id, salle, professeur } = req.body;
+  const { jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine } = req.body;
   if (!jour || !heure_debut || !heure_fin) {
     return res.status(400).json({ error: 'Jour et horaires requis' });
   }
+  const semaineValue = ['S1', 'S2', 'Toutes'].includes(semaine) ? semaine : 'Toutes';
   const info = db
     .prepare(
-      `INSERT INTO creneaux (jour, heure_debut, heure_fin, matiere_id, salle, professeur)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO creneaux (jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(jour, heure_debut, heure_fin, matiere_id || null, salle || '', professeur || '');
+    .run(jour, heure_debut, heure_fin, matiere_id || null, salle || '', professeur || '', semaineValue);
   res.json({ success: true, id: info.lastInsertRowid });
 });
 
 app.put('/api/admin/creneaux/:id', requireAdmin, (req, res) => {
-  const { jour, heure_debut, heure_fin, matiere_id, salle, professeur } = req.body;
+  const { jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine } = req.body;
+  const semaineValue = ['S1', 'S2', 'Toutes'].includes(semaine) ? semaine : 'Toutes';
   db.prepare(
-    `UPDATE creneaux SET jour=?, heure_debut=?, heure_fin=?, matiere_id=?, salle=?, professeur=? WHERE id=?`
-  ).run(jour, heure_debut, heure_fin, matiere_id || null, salle || '', professeur || '', Number(req.params.id));
+    `UPDATE creneaux SET jour=?, heure_debut=?, heure_fin=?, matiere_id=?, salle=?, professeur=?, semaine=? WHERE id=?`
+  ).run(jour, heure_debut, heure_fin, matiere_id || null, salle || '', professeur || '', semaineValue, Number(req.params.id));
   res.json({ success: true });
 });
 

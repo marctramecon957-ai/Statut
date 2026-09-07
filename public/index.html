@@ -16,6 +16,12 @@
 </head>
 <body>
 
+<div id="splashScreen" class="splash-screen">
+  <img src="/assets/logo.png" alt="Valenca Studio" class="splash-logo" />
+  <div class="splash-title">Valenca Studio</div>
+  <div class="splash-spinner"></div>
+</div>
+
 <header class="topbar">
   <div class="brand">
     <img src="/assets/logo.png" alt="Valenca Studio" class="brand-logo" />
@@ -88,6 +94,10 @@
     <div class="schedule-header">
       <h1>Emploi du temps — 1MELEC</h1>
       <div class="schedule-actions">
+        <div class="week-toggle" id="weekToggle">
+          <button type="button" class="week-btn active" data-week="S1">Semaine 1</button>
+          <button type="button" class="week-btn" data-week="S2">Semaine 2</button>
+        </div>
         <button id="btnInstall" class="btn btn-ghost hidden">📲 Installer sur mon téléphone</button>
         <a id="btnAdminLink" class="btn btn-ghost hidden" href="#admin">Espace admin</a>
       </div>
@@ -151,6 +161,11 @@
           <select id="creneauMatiere">
             <option value="">— Aucune matière —</option>
           </select>
+          <select id="creneauSemaine">
+            <option value="Toutes">Les deux semaines</option>
+            <option value="S1">Semaine 1 seulement</option>
+            <option value="S2">Semaine 2 seulement</option>
+          </select>
           <input type="text" id="creneauSalle" placeholder="Salle (optionnel)" />
           <input type="text" id="creneauProf" placeholder="Professeur (optionnel)" />
           <button type="submit" class="btn btn-primary">Ajouter le créneau</button>
@@ -160,7 +175,7 @@
           <table class="schedule-table">
             <thead>
               <tr>
-                <th>Jour</th><th>Début</th><th>Fin</th><th>Matière</th><th>Salle</th><th>Professeur</th><th></th>
+                <th>Jour</th><th>Début</th><th>Fin</th><th>Matière</th><th>Semaine</th><th>Salle</th><th>Professeur</th><th></th>
               </tr>
             </thead>
             <tbody id="creneauAdminBody"></tbody>
