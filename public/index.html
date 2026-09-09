@@ -102,15 +102,18 @@
         <a id="btnAdminLink" class="btn btn-ghost hidden" href="#admin">Espace admin</a>
       </div>
     </div>
-    <div class="table-wrap">
-      <table id="scheduleTable" class="schedule-table">
-        <thead>
-          <tr id="scheduleHeadRow"></tr>
-        </thead>
-        <tbody id="scheduleBody"></tbody>
-      </table>
+
+    <div class="day-tabs" id="dayTabs">
+      <button type="button" class="day-tab active" data-day="Lundi">Lundi</button>
+      <button type="button" class="day-tab" data-day="Mardi">Mardi</button>
+      <button type="button" class="day-tab" data-day="Mercredi">Mercredi</button>
+      <button type="button" class="day-tab" data-day="Jeudi">Jeudi</button>
+      <button type="button" class="day-tab" data-day="Vendredi">Vendredi</button>
+      <button type="button" class="day-tab" data-day="Samedi">Samedi</button>
+      <button type="button" class="day-tab" data-day="Semaine">Semaine</button>
     </div>
-    <div id="scheduleMobile" class="schedule-mobile"></div>
+
+    <div id="timelineContainer" class="timeline-container"></div>
   </section>
 
   <!-- ADMIN -->
@@ -143,6 +146,19 @@
           <button type="submit" class="btn btn-primary">Créer le compte</button>
         </form>
         <ul id="userList" class="simple-list"></ul>
+      </div>
+
+      <div class="card admin-card-wide">
+        <h2>Importer un PDF</h2>
+        <p class="muted">Importez un emploi du temps existant au format PDF pour en extraire le texte et créer les créneaux plus rapidement (l'extraction n'est pas automatique, elle vous sert de repère).</p>
+        <form id="pdfImportForm" class="inline-form">
+          <input type="file" id="pdfFile" accept="application/pdf" required />
+          <button type="submit" class="btn btn-primary">Importer</button>
+        </form>
+        <div id="pdfResult" class="pdf-result hidden">
+          <h3>Texte extrait du PDF</h3>
+          <textarea id="pdfExtractedText" readonly rows="10"></textarea>
+        </div>
       </div>
 
       <div class="card admin-card-wide">

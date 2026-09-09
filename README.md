@@ -3,7 +3,14 @@
 Application web (mobile + ordinateur) pour consulter et gérer l'emploi du temps
 de la classe **1MELEC** du **Lycée Albert Londres**.
 
-- Emploi du temps consultable de 8h à 18h, avec bascule **Semaine 1 / Semaine 2**
+- Emploi du temps affiché sous forme de **frise horaire** (8h à 18h) : une
+  barre par cours, sans texte visible dessus — cliquez dessus pour voir le
+  détail (matière, horaire, salle, professeur) dans une bulle
+- Navigation par onglets **Lundi, Mardi, Mercredi, Jeudi, Vendredi, Samedi,
+  Semaine** (vue combinée de tous les jours), avec bascule **Semaine 1 /
+  Semaine 2**
+- Import PDF côté admin : extrait le texte d'un emploi du temps existant au
+  format PDF pour aider à ressaisir rapidement les créneaux
 - Matières créées librement depuis l'espace admin (sans couleur imposée)
 - Espace administrateur protégé par identifiants
 - Comptes élèves avec mot de passe provisoire : au premier login, l'utilisateur
@@ -46,6 +53,10 @@ modifiant `ADMIN_USERNAME` et `ADMIN_PASSWORD` dans le fichier `.env`.
    professeur) — les horaires proposés vont de 8h à 18h. Pour chaque créneau,
    choisissez s'il a lieu **les deux semaines**, uniquement en **semaine 1**,
    ou uniquement en **semaine 2** (utile pour les emplois du temps alternés).
+5. Pour aller plus vite, utilisez l'**import PDF** : uploadez un ancien
+   emploi du temps au format PDF, le texte en est extrait et affiché pour
+   vous servir de repère pendant la saisie des créneaux (l'extraction n'est
+   pas automatique — c'est une aide à la lecture, pas un remplissage magique).
 5. Créez des **comptes utilisateurs** (élèves) avec un nom d'utilisateur et un
    mot de passe provisoire. Vous pouvez aussi réinitialiser le mot de passe
    d'un compte existant à tout moment (bouton "Réinitialiser").

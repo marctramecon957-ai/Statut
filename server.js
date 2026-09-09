@@ -4,6 +4,8 @@ const express = require('express');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const { extractTextFromPdf } = require('./db/pdf-extract');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -133,6 +135,30 @@ app.post('/api/admin/users/:id/reset-password', requireAdmin, (req, res) => {
   const hash = bcrypt.hashSync(newPassword, 10);
   db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(hash, id);
   res.json({ success: true });
+});
+
+// ---------- IMPORT PDF ----------
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15 Mo max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype !== 'application/pdf') return cb(new Error('Seuls les fichiers PDF sont acceptés'));
+    cb(null, true);
+  },
+});
+
+app.post('/api/admin/import-pdf', requireAdmin, (req, res) => {
+  upload.single('pdf')(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
+
+    try {
+      const texte = await extractTextFromPdf(req.file.buffer);
+      res.json({ success: true, text: texte });
+    } catch (e) {
+      res.status(500).json({ error: 'Impossible de lire ce PDF' });
+    }
+  });
 });
 
 // ---------- MATIERES ----------

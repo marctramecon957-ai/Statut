@@ -17,6 +17,7 @@ let state = {
   matieres: [],
   creneaux: [],
   semaineActive: 'S1',
+  jourActif: 'Lundi',
 };
 
 const views = {
@@ -207,95 +208,103 @@ function syncWeekToggleUI() {
   document.querySelectorAll('.week-btn').forEach(b => b.classList.toggle('active', b.dataset.week === state.semaineActive));
 }
 
-// ================= AFFICHAGE EMPLOI DU TEMPS =================
+// ================= AFFICHAGE EMPLOI DU TEMPS (FRISE) =================
+const HEURE_DEBUT_JOURNEE = 8; // 8h
+const HEURE_FIN_JOURNEE = 18;  // 18h
+const HEURES_LABELS = ['8h', '10h', '12h', '14h', '16h', '18h'];
+
 function creneauxSemaine() {
   return state.creneaux.filter(c => c.semaine === 'Toutes' || c.semaine === state.semaineActive);
 }
 
+function minutesDepuisDebutJournee(heureStr) {
+  const [h, m] = heureStr.split(':').map(Number);
+  return (h - HEURE_DEBUT_JOURNEE) * 60 + m;
+}
+
 function renderSchedule() {
-  const heures = genererCreneauxAffichage();
-  renderScheduleDesktop(heures);
-  renderScheduleMobile();
-}
-
-// Regroupe les créneaux existants par heure de début unique, triée
-function genererCreneauxAffichage() {
-  const set = new Set(creneauxSemaine().map(c => c.heure_debut));
-  return Array.from(set).sort();
-}
-
-function renderScheduleDesktop(heuresUniques) {
-  const headRow = document.getElementById('scheduleHeadRow');
-  const body = document.getElementById('scheduleBody');
-  headRow.innerHTML = '<th>Horaire</th>' + JOURS.map(j => `<th>${j}</th>`).join('');
-  body.innerHTML = '';
-
-  if (heuresUniques.length === 0) {
-    body.innerHTML = `<tr><td colspan="${JOURS.length + 1}" style="text-align:center; color:var(--cream-dim);">Aucun créneau n'a encore été ajouté pour cette semaine.</td></tr>`;
-    return;
-  }
-
-  const creneaux = creneauxSemaine();
-
-  heuresUniques.forEach(heure => {
-    const tr = document.createElement('tr');
-    const creneauxHeure = creneaux.filter(c => c.heure_debut === heure);
-    const fin = creneauxHeure[0] ? creneauxHeure[0].heure_fin : '';
-    let html = `<td class="time-cell">${heure} - ${fin}</td>`;
-
-    JOURS.forEach(jour => {
-      const c = creneauxHeure.find(x => x.jour === jour);
-      if (c) {
-        html += `<td><div class="slot">
-          <div class="slot-matiere">${escapeHtml(c.matiere_nom || 'Sans matière')}</div>
-          ${c.salle ? `<div class="slot-detail">Salle ${escapeHtml(c.salle)}</div>` : ''}
-          ${c.professeur ? `<div class="slot-detail">${escapeHtml(c.professeur)}</div>` : ''}
-        </div></td>`;
-      } else {
-        html += '<td></td>';
-      }
-    });
-    tr.innerHTML = html;
-    body.appendChild(tr);
-  });
-}
-
-function renderScheduleMobile() {
-  const container = document.getElementById('scheduleMobile');
+  const container = document.getElementById('timelineContainer');
   container.innerHTML = '';
+
   const creneaux = creneauxSemaine();
+  const joursAAfficher = state.jourActif === 'Semaine' ? JOURS : [state.jourActif];
 
-  JOURS.forEach(jour => {
-    const creneauxJour = creneaux
-      .filter(c => c.jour === jour)
-      .sort((a, b) => a.heure_debut.localeCompare(b.heure_debut));
+  const scroll = document.createElement('div');
+  scroll.className = 'timeline-scroll';
 
-    if (creneauxJour.length === 0) return;
+  joursAAfficher.forEach(jour => {
+    const creneauxJour = creneaux.filter(c => c.jour === jour);
+    const dayWrap = document.createElement('div');
+    dayWrap.className = 'timeline-day-wrap';
+    dayWrap.style.flex = state.jourActif === 'Semaine' ? '1' : 'none';
+    dayWrap.style.width = state.jourActif === 'Semaine' ? 'auto' : '100%';
 
-    const dayDiv = document.createElement('div');
-    dayDiv.className = 'mobile-day';
-    dayDiv.innerHTML = `<h3>${jour}</h3>`;
+    let html = '';
+    if (state.jourActif === 'Semaine') {
+      html += `<div class="timeline-day-label">${jour}</div>`;
+    }
+
+    html += '<div class="timeline-day">';
+    if (jour === joursAAfficher[0]) {
+      html += `<div class="timeline-hours">${HEURES_LABELS.map(h => `<span>${h}</span>`).join('')}</div>`;
+    }
+    html += '<div class="timeline-track" style="height:360px;">';
 
     creneauxJour.forEach(c => {
-      const slot = document.createElement('div');
-      slot.className = 'mobile-slot';
-      slot.innerHTML = `
-        <div class="time">${c.heure_debut} - ${c.heure_fin}</div>
-        <div class="info">
-          <div class="matiere">${escapeHtml(c.matiere_nom || 'Sans matière')}</div>
-          ${c.salle ? `<div class="detail">Salle ${escapeHtml(c.salle)}</div>` : ''}
-          ${c.professeur ? `<div class="detail">${escapeHtml(c.professeur)}</div>` : ''}
-        </div>`;
-      dayDiv.appendChild(slot);
+      const topPct = (minutesDepuisDebutJournee(c.heure_debut) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
+      const heightPct = ((minutesDepuisDebutJournee(c.heure_fin) - minutesDepuisDebutJournee(c.heure_debut)) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
+      html += `<div class="time-bar" data-id="${c.id}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;"></div>`;
     });
 
-    container.appendChild(dayDiv);
+    html += '</div></div>';
+    dayWrap.innerHTML = html;
+    scroll.appendChild(dayWrap);
   });
 
-  if (container.innerHTML === '') {
-    container.innerHTML = '<p class="muted">Aucun créneau n\'a encore été ajouté.</p>';
+  container.appendChild(scroll);
+
+  if (creneaux.filter(c => joursAAfficher.includes(c.jour)).length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'timeline-empty';
+    empty.textContent = "Aucun créneau n'a encore été ajouté.";
+    container.appendChild(empty);
   }
+
+  // Gestion du clic sur une barre : ouvrir/fermer la bulle de détail
+  container.querySelectorAll('.time-bar').forEach(bar => {
+    bar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dejaOuverte = bar.querySelector('.time-bubble');
+      document.querySelectorAll('.time-bubble').forEach(b => b.remove());
+      if (dejaOuverte) return;
+
+      const c = creneaux.find(x => String(x.id) === bar.dataset.id);
+      if (!c) return;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'time-bubble';
+      bubble.innerHTML = `
+        <div class="bubble-matiere">${escapeHtml(c.matiere_nom || 'Sans matière')}</div>
+        <div class="bubble-detail">${c.heure_debut} - ${c.heure_fin}</div>
+        ${c.salle ? `<div class="bubble-detail">Salle ${escapeHtml(c.salle)}</div>` : ''}
+        ${c.professeur ? `<div class="bubble-detail">${escapeHtml(c.professeur)}</div>` : ''}
+      `;
+      bar.appendChild(bubble);
+    });
+  });
 }
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.time-bubble').forEach(b => b.remove());
+});
+
+document.getElementById('dayTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.day-tab');
+  if (!btn) return;
+  state.jourActif = btn.dataset.day;
+  document.querySelectorAll('.day-tab').forEach(b => b.classList.toggle('active', b === btn));
+  renderSchedule();
+});
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -473,6 +482,28 @@ document.getElementById('creneauForm').addEventListener('submit', async (e) => {
     document.getElementById('creneauProf').value = '';
     await loadAdminView();
     renderSchedule();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+// ---- Import PDF ----
+document.getElementById('pdfImportForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fileInput = document.getElementById('pdfFile');
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('pdf', file);
+
+  try {
+    const res = await fetch('/api/admin/import-pdf', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur lors de l\'import');
+
+    document.getElementById('pdfExtractedText').value = data.text || '(aucun texte détecté dans ce PDF)';
+    document.getElementById('pdfResult').classList.remove('hidden');
   } catch (err) {
     alert(err.message);
   }
