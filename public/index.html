@@ -150,14 +150,32 @@
 
       <div class="card admin-card-wide">
         <h2>Importer un PDF</h2>
-        <p class="muted">Importez un emploi du temps existant au format PDF pour en extraire le texte et créer les créneaux plus rapidement (l'extraction n'est pas automatique, elle vous sert de repère).</p>
+        <p class="muted">Importez un emploi du temps existant au format PDF : les créneaux sont détectés automatiquement et proposés ci-dessous. Corrigez ce qui est nécessaire, puis validez pour les créer.</p>
         <form id="pdfImportForm" class="inline-form">
           <input type="file" id="pdfFile" accept="application/pdf" required />
-          <button type="submit" class="btn btn-primary">Importer</button>
+          <button type="submit" class="btn btn-primary">Analyser le PDF</button>
         </form>
-        <div id="pdfResult" class="pdf-result hidden">
-          <h3>Texte extrait du PDF</h3>
-          <textarea id="pdfExtractedText" readonly rows="10"></textarea>
+
+        <div id="pdfReview" class="pdf-result hidden">
+          <h3>Créneaux détectés — vérifiez et corrigez si besoin</h3>
+          <div class="table-wrap">
+            <table class="schedule-table">
+              <thead>
+                <tr>
+                  <th>Jour</th><th>Début</th><th>Fin</th><th>Matière</th><th>Semaine</th><th>Salle</th><th>Professeur</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="pdfCreneauxBody"></tbody>
+            </table>
+          </div>
+          <div class="pdf-review-actions">
+            <button type="button" id="pdfAddRow" class="btn btn-ghost">Ajouter une ligne</button>
+            <button type="button" id="pdfValidateImport" class="btn btn-primary">Créer ces créneaux</button>
+          </div>
+          <details class="pdf-raw-text">
+            <summary>Voir le texte brut extrait du PDF</summary>
+            <textarea id="pdfExtractedText" readonly rows="8"></textarea>
+          </details>
         </div>
       </div>
 

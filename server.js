@@ -5,7 +5,7 @@ const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
-const { extractTextFromPdf } = require('./db/pdf-extract');
+const { analyserPdf } = require('./db/pdf-extract');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -153,8 +153,8 @@ app.post('/api/admin/import-pdf', requireAdmin, (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
 
     try {
-      const texte = await extractTextFromPdf(req.file.buffer);
-      res.json({ success: true, text: texte });
+      const { texte, creneaux } = await analyserPdf(req.file.buffer);
+      res.json({ success: true, text: texte, creneaux });
     } catch (e) {
       res.status(500).json({ error: 'Impossible de lire ce PDF' });
     }

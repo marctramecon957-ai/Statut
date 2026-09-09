@@ -9,8 +9,10 @@ de la classe **1MELEC** du **Lycée Albert Londres**.
 - Navigation par onglets **Lundi, Mardi, Mercredi, Jeudi, Vendredi, Samedi,
   Semaine** (vue combinée de tous les jours), avec bascule **Semaine 1 /
   Semaine 2**
-- Import PDF côté admin : extrait le texte d'un emploi du temps existant au
-  format PDF pour aider à ressaisir rapidement les créneaux
+- Import PDF avec **détection automatique des créneaux** : uploadez un emploi
+  du temps existant au format PDF, les cours (jour, horaires, matière, salle)
+  sont détectés automatiquement et proposés dans un tableau modifiable —
+  corrigez ce qu'il faut, puis validez pour créer les créneaux en un clic
 - Matières créées librement depuis l'espace admin (sans couleur imposée)
 - Espace administrateur protégé par identifiants
 - Comptes élèves avec mot de passe provisoire : au premier login, l'utilisateur
@@ -54,9 +56,15 @@ modifiant `ADMIN_USERNAME` et `ADMIN_PASSWORD` dans le fichier `.env`.
    choisissez s'il a lieu **les deux semaines**, uniquement en **semaine 1**,
    ou uniquement en **semaine 2** (utile pour les emplois du temps alternés).
 5. Pour aller plus vite, utilisez l'**import PDF** : uploadez un ancien
-   emploi du temps au format PDF, le texte en est extrait et affiché pour
-   vous servir de repère pendant la saisie des créneaux (l'extraction n'est
-   pas automatique — c'est une aide à la lecture, pas un remplissage magique).
+   emploi du temps au format PDF. Les créneaux (jour, horaires, matière,
+   salle) sont **détectés automatiquement** et affichés dans un tableau
+   modifiable. Corrigez les champs si la détection n'est pas parfaite
+   (ajoutez le professeur, ajustez une salle mal reconnue, etc.), retirez
+   les lignes en trop ou ajoutez-en manuellement, puis cliquez sur
+   **"Créer ces créneaux"** : les matières et créneaux sont créés
+   automatiquement. La détection est une aide au remplissage, pas une
+   garantie à 100 % — le tableau est là pour que vous puissiez tout
+   vérifier avant validation.
 5. Créez des **comptes utilisateurs** (élèves) avec un nom d'utilisateur et un
    mot de passe provisoire. Vous pouvez aussi réinitialiser le mot de passe
    d'un compte existant à tout moment (bouton "Réinitialiser").

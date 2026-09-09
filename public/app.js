@@ -488,6 +488,8 @@ document.getElementById('creneauForm').addEventListener('submit', async (e) => {
 });
 
 // ---- Import PDF ----
+let pdfCreneauxDetectes = [];
+
 document.getElementById('pdfImportForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fileInput = document.getElementById('pdfFile');
@@ -502,10 +504,127 @@ document.getElementById('pdfImportForm').addEventListener('submit', async (e) =>
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Erreur lors de l\'import');
 
+    pdfCreneauxDetectes = data.creneaux || [];
     document.getElementById('pdfExtractedText').value = data.text || '(aucun texte détecté dans ce PDF)';
-    document.getElementById('pdfResult').classList.remove('hidden');
+    document.getElementById('pdfReview').classList.remove('hidden');
+    renderPdfReviewTable();
+
+    if (pdfCreneauxDetectes.length === 0) {
+      alert("Aucun créneau n'a pu être détecté automatiquement dans ce PDF. Vous pouvez en ajouter manuellement avec le bouton \"Ajouter une ligne\", ou consulter le texte brut extrait plus bas.");
+    }
   } catch (err) {
     alert(err.message);
+  }
+});
+
+function renderPdfReviewTable() {
+  const body = document.getElementById('pdfCreneauxBody');
+  body.innerHTML = '';
+  const heures = genererHeures();
+
+  pdfCreneauxDetectes.forEach((c, index) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <select class="pdf-row-input" data-field="jour" data-index="${index}">
+          ${JOURS.map(j => `<option value="${j}" ${c.jour === j ? 'selected' : ''}>${j}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="pdf-row-input" data-field="heure_debut" data-index="${index}">
+          ${heures.map(h => `<option value="${h}" ${c.heure_debut === h ? 'selected' : ''}>${h}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="pdf-row-input" data-field="heure_fin" data-index="${index}">
+          ${heures.map(h => `<option value="${h}" ${c.heure_fin === h ? 'selected' : ''}>${h}</option>`).join('')}
+        </select>
+      </td>
+      <td><input class="pdf-row-input" data-field="matiere_nom" data-index="${index}" value="${escapeHtml(c.matiere_nom || '')}" /></td>
+      <td>
+        <select class="pdf-row-input" data-field="semaine" data-index="${index}">
+          <option value="Toutes" ${c.semaine === 'Toutes' ? 'selected' : ''}>Les deux</option>
+          <option value="S1" ${c.semaine === 'S1' ? 'selected' : ''}>S1</option>
+          <option value="S2" ${c.semaine === 'S2' ? 'selected' : ''}>S2</option>
+        </select>
+      </td>
+      <td><input class="pdf-row-input" data-field="salle" data-index="${index}" value="${escapeHtml(c.salle || '')}" /></td>
+      <td><input class="pdf-row-input" data-field="professeur" data-index="${index}" value="${escapeHtml(c.professeur || '')}" /></td>
+      <td><button type="button" class="icon-btn danger" data-remove="${index}">Retirer</button></td>`;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll('.pdf-row-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const i = Number(e.target.dataset.index);
+      const field = e.target.dataset.field;
+      pdfCreneauxDetectes[i][field] = e.target.value;
+    });
+  });
+
+  body.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pdfCreneauxDetectes.splice(Number(btn.dataset.remove), 1);
+      renderPdfReviewTable();
+    });
+  });
+}
+
+document.getElementById('pdfAddRow').addEventListener('click', () => {
+  pdfCreneauxDetectes.push({
+    jour: 'Lundi', heure_debut: '08:00', heure_fin: '09:00',
+    matiere_nom: '', salle: '', professeur: '', semaine: 'Toutes',
+  });
+  renderPdfReviewTable();
+});
+
+document.getElementById('pdfValidateImport').addEventListener('click', async () => {
+  if (pdfCreneauxDetectes.length === 0) {
+    alert('Aucun créneau à importer.');
+    return;
+  }
+
+  const btn = document.getElementById('pdfValidateImport');
+  btn.disabled = true;
+  btn.textContent = 'Import en cours...';
+
+  try {
+    for (const c of pdfCreneauxDetectes) {
+      if (!c.matiere_nom || !c.matiere_nom.trim()) continue;
+
+      // Cherche une matiere existante (insensible a la casse), sinon la cree
+      let matiere = state.matieres.find(m => m.nom.toLowerCase() === c.matiere_nom.trim().toLowerCase());
+      if (!matiere) {
+        const created = await api('/api/admin/matieres', { method: 'POST', body: JSON.stringify({ nom: c.matiere_nom.trim() }) });
+        matiere = { id: created.id, nom: c.matiere_nom.trim() };
+        state.matieres.push(matiere);
+      }
+
+      await api('/api/admin/creneaux', {
+        method: 'POST',
+        body: JSON.stringify({
+          jour: c.jour,
+          heure_debut: c.heure_debut,
+          heure_fin: c.heure_fin,
+          matiere_id: matiere.id,
+          salle: c.salle,
+          professeur: c.professeur,
+          semaine: c.semaine || 'Toutes',
+        }),
+      });
+    }
+
+    pdfCreneauxDetectes = [];
+    document.getElementById('pdfReview').classList.add('hidden');
+    document.getElementById('pdfFile').value = '';
+    await loadAdminView();
+    renderSchedule();
+    alert('Créneaux importés avec succès. Vous pouvez encore les modifier depuis le tableau ci-dessous.');
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer ces créneaux';
   }
 });
 
