@@ -193,23 +193,6 @@ form input:focus, form select:focus { outline: none; border-color: var(--cream);
 }
 .time-bar:hover { opacity: 0.85; }
 
-.time-bubble {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  margin-top: 6px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  width: 190px;
-  font-size: 0.8rem;
-  z-index: 30;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-}
-.time-bubble .bubble-matiere { font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; }
-.time-bubble .bubble-detail { color: var(--cream-dim); margin-bottom: 2px; }
-
 .timeline-empty { color: var(--cream-dim); font-size: 0.85rem; margin-top: 20px; }
 
 /* ---------- Import PDF (admin) ---------- */
@@ -377,6 +360,25 @@ form input:focus, form select:focus { outline: none; border-color: var(--cream);
 }
 .modal-card h2 { margin-top: 0; }
 .modal-card p { white-space: pre-line; line-height: 1.5; text-align: left; }
+
+/* ---------- Fenêtre de détail d'un cours ---------- */
+#coursModal { z-index: 100; }
+.cours-modal-card { position: relative; text-align: left; }
+.cours-modal-card h2 { font-size: 1.1rem; padding-right: 24px; }
+.cours-modal-horaire { color: var(--cream-dim); font-size: 0.9rem; margin-top: -6px; }
+.cours-modal-detail { font-size: 0.9rem; margin: 4px 0; }
+.modal-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: transparent;
+  border: none;
+  color: var(--cream-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.modal-close-btn:hover { color: var(--cream); }
 
 /* ---------- Ecran de chargement ---------- */
 .splash-screen {

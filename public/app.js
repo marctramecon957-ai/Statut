@@ -270,32 +270,38 @@ function renderSchedule() {
     container.appendChild(empty);
   }
 
-  // Gestion du clic sur une barre : ouvrir/fermer la bulle de détail
+  // Gestion du clic sur une barre : ouvrir la fenêtre de détail
   container.querySelectorAll('.time-bar').forEach(bar => {
     bar.addEventListener('click', (e) => {
       e.stopPropagation();
-      const dejaOuverte = bar.querySelector('.time-bubble');
-      document.querySelectorAll('.time-bubble').forEach(b => b.remove());
-      if (dejaOuverte) return;
-
       const c = creneaux.find(x => String(x.id) === bar.dataset.id);
       if (!c) return;
-
-      const bubble = document.createElement('div');
-      bubble.className = 'time-bubble';
-      bubble.innerHTML = `
-        <div class="bubble-matiere">${escapeHtml(c.matiere_nom || 'Sans matière')}</div>
-        <div class="bubble-detail">${c.heure_debut} - ${c.heure_fin}</div>
-        ${c.salle ? `<div class="bubble-detail">Salle ${escapeHtml(c.salle)}</div>` : ''}
-        ${c.professeur ? `<div class="bubble-detail">${escapeHtml(c.professeur)}</div>` : ''}
-      `;
-      bar.appendChild(bubble);
+      ouvrirFenetreCours(c);
     });
   });
 }
 
-document.addEventListener('click', () => {
-  document.querySelectorAll('.time-bubble').forEach(b => b.remove());
+function ouvrirFenetreCours(c) {
+  const overlay = document.getElementById('coursModal');
+  document.getElementById('coursModalMatiere').textContent = c.matiere_nom || 'Sans matière';
+  document.getElementById('coursModalHoraire').textContent = `${c.heure_debut} - ${c.heure_fin}`;
+
+  const salleLigne = document.getElementById('coursModalSalle');
+  if (c.salle) { salleLigne.textContent = `Salle ${c.salle}`; salleLigne.classList.remove('hidden'); }
+  else { salleLigne.classList.add('hidden'); }
+
+  const profLigne = document.getElementById('coursModalProf');
+  if (c.professeur) { profLigne.textContent = c.professeur; profLigne.classList.remove('hidden'); }
+  else { profLigne.classList.add('hidden'); }
+
+  overlay.classList.remove('hidden');
+}
+
+document.getElementById('coursModalClose').addEventListener('click', () => {
+  document.getElementById('coursModal').classList.add('hidden');
+});
+document.getElementById('coursModal').addEventListener('click', (e) => {
+  if (e.target.id === 'coursModal') document.getElementById('coursModal').classList.add('hidden');
 });
 
 document.getElementById('dayTabs').addEventListener('click', (e) => {
