@@ -6,6 +6,7 @@ const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { analyserPdf } = require('./db/pdf-extract');
+const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique } = require('./db/pronote-sync');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -224,6 +225,32 @@ app.delete('/api/admin/creneaux/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// ---------- PRONOTE ----------
+app.get('/api/pronote-evenements', requireAuth, (req, res) => {
+  // Retourne les evenements de la semaine courante (lundi a samedi)
+  const aujourdhui = new Date();
+  const jourSemaine = (aujourdhui.getDay() + 6) % 7; // 0 = lundi
+  const lundi = new Date(aujourdhui);
+  lundi.setDate(aujourdhui.getDate() - jourSemaine);
+  const samedi = new Date(lundi);
+  samedi.setDate(lundi.getDate() + 5);
+
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const rows = db
+    .prepare('SELECT * FROM pronote_evenements WHERE date >= ? AND date <= ? ORDER BY date, heure_debut')
+    .all(fmt(lundi), fmt(samedi));
+  res.json(rows);
+});
+
+app.get('/api/admin/pronote-statut', requireAdmin, (req, res) => {
+  res.json(obtenirStatutSync());
+});
+
+app.post('/api/admin/pronote-sync', requireAdmin, async (req, res) => {
+  const resultat = await lancerSynchronisation();
+  res.json(resultat);
+});
+
 // ---------- Pages ----------
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
@@ -232,4 +259,5 @@ app.get('*', (req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Serveur Valenca Studio - Emploi du temps demarre sur le port ${PORT}`);
+  demarrerSyncPeriodique(20);
 });

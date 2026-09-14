@@ -32,6 +32,20 @@ CREATE TABLE IF NOT EXISTS creneaux (
   semaine TEXT NOT NULL DEFAULT 'Toutes', -- 'S1', 'S2' ou 'Toutes' (les deux semaines)
   FOREIGN KEY (matiere_id) REFERENCES matieres(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS pronote_evenements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL,        -- 'YYYY-MM-DD'
+  jour TEXT NOT NULL,
+  heure_debut TEXT NOT NULL,
+  heure_fin TEXT NOT NULL,
+  matiere_nom TEXT,
+  salle TEXT,
+  professeur TEXT,
+  statut TEXT NOT NULL DEFAULT 'normal', -- 'normal', 'annule', 'modifie'
+  commentaire TEXT,
+  synced_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // Migration douce : ajoute la colonne "semaine" si la base existait avant son introduction

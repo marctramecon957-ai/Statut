@@ -95,6 +95,40 @@ async function loadDataAndShowSchedule() {
   syncWeekToggleUI();
   renderSchedule();
   showView('schedule');
+  chargerEvenementsPronote();
+}
+
+// ---- Pronote : evenements de la semaine reelle en cours (annulations, etc.) ----
+state.pronoteEvenements = [];
+
+async function chargerEvenementsPronote() {
+  try {
+    state.pronoteEvenements = await api('/api/pronote-evenements');
+  } catch (e) {
+    state.pronoteEvenements = [];
+  }
+  renderSchedule();
+}
+
+// Calcule la date reelle (YYYY-MM-DD) du jour donne pour la semaine en cours
+function dateReelleDuJour(jour) {
+  const indexJour = JOURS.indexOf(jour); // 0=Lundi ... 5=Samedi
+  if (indexJour === -1) return null;
+  const aujourdhui = new Date();
+  const jourSemaineActuel = (aujourdhui.getDay() + 6) % 7; // 0=lundi
+  const lundi = new Date(aujourdhui);
+  lundi.setDate(aujourdhui.getDate() - jourSemaineActuel);
+  const cible = new Date(lundi);
+  cible.setDate(lundi.getDate() + indexJour);
+  return cible.toISOString().slice(0, 10);
+}
+
+function trouverEvenementPronote(jour, heure_debut, heure_fin) {
+  const date = dateReelleDuJour(jour);
+  if (!date) return null;
+  return state.pronoteEvenements.find(e =>
+    e.date === date && e.heure_debut === heure_debut && e.heure_fin === heure_fin
+  ) || null;
 }
 
 // ---------- LOGIN ----------
@@ -253,7 +287,9 @@ function renderSchedule() {
     creneauxJour.forEach(c => {
       const topPct = (minutesDepuisDebutJournee(c.heure_debut) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
       const heightPct = ((minutesDepuisDebutJournee(c.heure_fin) - minutesDepuisDebutJournee(c.heure_debut)) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
-      html += `<div class="time-bar" data-id="${c.id}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;"></div>`;
+      const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+      const classeStatut = evt && evt.statut === 'annule' ? ' annule' : (evt && evt.statut === 'modifie' ? ' modifie' : '');
+      html += `<div class="time-bar${classeStatut}" data-id="${c.id}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;"></div>`;
     });
 
     html += '</div></div>';
@@ -285,6 +321,20 @@ function ouvrirFenetreCours(c) {
   const overlay = document.getElementById('coursModal');
   document.getElementById('coursModalMatiere').textContent = c.matiere_nom || 'Sans matière';
   document.getElementById('coursModalHoraire').textContent = `${c.heure_debut} - ${c.heure_fin}`;
+
+  const statutLigne = document.getElementById('coursModalStatut');
+  const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+  if (evt && evt.statut === 'annule') {
+    statutLigne.textContent = 'Cours annulé';
+    statutLigne.className = 'cours-modal-statut annule';
+    statutLigne.classList.remove('hidden');
+  } else if (evt && evt.statut === 'modifie') {
+    statutLigne.textContent = evt.commentaire ? `Modifié — ${evt.commentaire}` : 'Cours modifié';
+    statutLigne.className = 'cours-modal-statut modifie';
+    statutLigne.classList.remove('hidden');
+  } else {
+    statutLigne.classList.add('hidden');
+  }
 
   const salleLigne = document.getElementById('coursModalSalle');
   if (c.salle) { salleLigne.textContent = `Salle ${c.salle}`; salleLigne.classList.remove('hidden'); }
@@ -334,7 +384,43 @@ async function loadAdminView() {
   renderUserList();
   renderCreneauAdminTable();
   setupHeureSelects();
+  chargerStatutPronote();
 }
+
+// ---- Pronote ----
+async function chargerStatutPronote() {
+  const el = document.getElementById('pronoteStatut');
+  try {
+    const s = await api('/api/admin/pronote-statut');
+    if (!s.configure) {
+      el.innerHTML = "Pronote n'est pas configuré sur ce serveur (variables d'environnement absentes).";
+    } else if (s.date === null) {
+      el.innerHTML = 'Configuré, en attente de la première synchronisation...';
+    } else if (s.succes) {
+      const date = new Date(s.date).toLocaleString('fr-FR');
+      el.innerHTML = `<span class="ok">Dernière synchro réussie</span> le ${date} — ${s.nombre} événement(s) récupéré(s).`;
+    } else {
+      const date = new Date(s.date).toLocaleString('fr-FR');
+      el.innerHTML = `<span class="erreur">Échec de la synchro</span> le ${date} : ${escapeHtml(s.erreur || '')}`;
+    }
+  } catch (e) {
+    el.textContent = 'Impossible de récupérer le statut Pronote.';
+  }
+}
+
+document.getElementById('btnPronoteSync').addEventListener('click', async () => {
+  const btn = document.getElementById('btnPronoteSync');
+  btn.disabled = true;
+  btn.textContent = 'Synchronisation en cours...';
+  try {
+    await api('/api/admin/pronote-sync', { method: 'POST' });
+  } catch (e) {
+    // l'erreur est deja affichee via le statut
+  }
+  await chargerStatutPronote();
+  btn.disabled = false;
+  btn.textContent = 'Synchroniser maintenant';
+});
 
 // ---- Matières ----
 function renderMatiereList() {

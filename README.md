@@ -23,6 +23,9 @@ de la classe **1MELEC** du **Lycée Albert Londres**.
 - Écran de chargement au démarrage de l'application
 - Installable sur téléphone comme une vraie application (PWA)
 - Thème visuel repris du logo fourni (fond sombre / crème)
+- Synchronisation optionnelle avec **Pronote** : récupère automatiquement les
+  cours annulés ou modifiés et les affiche sur la frise (barre grisée avec
+  motif pour les cours annulés, orange pour les cours modifiés)
 
 ## 1. Installation en local
 
@@ -114,6 +117,39 @@ github.com.)
    démarre le site automatiquement. Une URL du type
    `https://votre-service.onrender.com` vous est fournie.
 
+## 4bis. Activer la synchronisation Pronote (optionnel)
+
+Cette fonctionnalité récupère automatiquement les cours annulés/modifiés
+depuis Pronote. Elle est **entièrement optionnelle** : sans configuration,
+le reste du site fonctionne normalement.
+
+1. **Modifier le Build Command sur Render** pour installer aussi Python :
+   remplacez `npm install` par :
+   ```
+   npm install && pip install -r requirements.txt --break-system-packages
+   ```
+   (Les images Node de Render incluent déjà Python 3 et pip.)
+2. Dans les variables d'environnement du service Render, ajoutez :
+   - `PRONOTE_URL` : l'URL directe de la page Pronote de l'établissement
+     (ex: `https://xxxx.index-education.net/pronote/eleve.html?identifiant=XXXX`)
+   - `PRONOTE_USERNAME` : l'identifiant de connexion Pronote (compte élève)
+   - `PRONOTE_PASSWORD` : le mot de passe Pronote correspondant
+3. Redéployez. Une synchronisation se lance automatiquement 5 secondes après
+   le démarrage, puis toutes les 20 minutes.
+4. Dans l'espace admin, le bloc **"Synchronisation Pronote"** affiche le
+   statut de la dernière synchro (réussie ou en erreur, avec le détail), et
+   propose un bouton **"Synchroniser maintenant"** pour forcer une mise à jour.
+5. Sur la frise, un cours annulé apparaît avec un motif rayé, et un cours
+   modifié en orange. Cliquer dessus affiche le détail dans la fenêtre.
+
+**Limites à connaître** : Pronote n'a pas d'API officielle ; cette
+fonctionnalité s'appuie sur la librairie communautaire `pronotepy`, qui
+imite une connexion navigateur classique. Elle peut cesser de fonctionner si
+Pronote change son fonctionnement interne, et certains établissements
+bloquent ce type de connexion automatisée. Ce n'est ni illégal ni contraire
+aux CGU pour un usage personnel, mais ce n'est pas une intégration garantie
+dans la durée.
+
 ## 5. Structure du projet
 
 ```
@@ -121,13 +157,18 @@ emploi-du-temps/
 ├── server.js              # Serveur Express (API + pages)
 ├── db/
 │   ├── database.js        # Connexion SQLite + création des tables
-│   └── seed.js            # Création du compte admin par défaut
+│   ├── seed.js            # Création du compte admin par défaut
+│   ├── pdf-extract.js     # Analyse et détection automatique depuis un PDF
+│   └── pronote-sync.js    # Orchestration de la synchronisation Pronote
+├── scripts/
+│   └── pronote_sync.py    # Script Python (pronotepy) appelé par le serveur
 ├── public/
 │   ├── index.html         # Page unique (login, emploi du temps, admin)
 │   ├── style.css          # Thème visuel (repris du logo)
 │   ├── app.js             # Logique front-end
 │   └── assets/logo.png    # Logo Valenca Studio
 ├── package.json
+├── requirements.txt       # Dépendance Python (pronotepy)
 ├── render.yaml            # Configuration de déploiement Render
 └── .env.example
 ```
@@ -137,6 +178,10 @@ emploi-du-temps/
 - Base de données : SQLite (fichier local, pas de service externe à payer).
 - Mots de passe stockés sous forme hachée (`bcryptjs`), jamais en clair.
 - Sessions utilisateurs stockées côté serveur (`express-session` +
-  `connect-sqlite3`), cookie valable 7 jours.
+  `connect-sqlite3`), cookie valable 1 an (connexion persistante).
 - Aucune couleur n'est associée automatiquement aux matières, comme demandé :
   seul le nom de la matière est affiché.
+- La synchronisation Pronote est optionnelle et n'affecte pas le
+  fonctionnement du reste du site si elle n'est pas configurée ou si elle
+  échoue.
+
