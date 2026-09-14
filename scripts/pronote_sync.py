@@ -6,8 +6,11 @@ Affiche le resultat en JSON sur stdout pour que le serveur Node puisse le lire.
 
 Variables d'environnement attendues :
   PRONOTE_URL       - URL Pronote (ex: https://xxxx.index-education.net/pronote/eleve.html?identifiant=XXXX)
-  PRONOTE_USERNAME  - identifiant de connexion Pronote
-  PRONOTE_PASSWORD  - mot de passe Pronote
+  PRONOTE_USERNAME  - identifiant de connexion (ENT ou Pronote selon le cas)
+  PRONOTE_PASSWORD  - mot de passe correspondant
+  PRONOTE_ENT       - optionnel : nom de l'ENT si l'etablissement en utilise un
+                       (ex: "ent_auvergnerhonealpe"). Laisser vide pour une
+                       connexion directe a Pronote sans ENT.
 """
 import sys
 import os
@@ -20,18 +23,26 @@ def erreur(message):
 
 try:
     import pronotepy
+    from pronotepy import ent as pronote_ent
 except ImportError:
     erreur("Le module pronotepy n'est pas installe sur le serveur")
 
 url = os.environ.get("PRONOTE_URL")
 username = os.environ.get("PRONOTE_USERNAME")
 password = os.environ.get("PRONOTE_PASSWORD")
+ent_nom = (os.environ.get("PRONOTE_ENT") or "").strip()
 
 if not url or not username or not password:
     erreur("Variables PRONOTE_URL / PRONOTE_USERNAME / PRONOTE_PASSWORD manquantes")
 
 try:
-    client = pronotepy.Client(url, username=username, password=password)
+    if ent_nom:
+        fonction_ent = getattr(pronote_ent, ent_nom, None)
+        if fonction_ent is None:
+            erreur(f"ENT '{ent_nom}' inconnu de pronotepy (verifiez PRONOTE_ENT)")
+        client = pronotepy.Client(url, username=username, password=password, ent=fonction_ent)
+    else:
+        client = pronotepy.Client(url, username=username, password=password)
 except Exception as e:
     erreur(f"Connexion a Pronote impossible : {e}")
 

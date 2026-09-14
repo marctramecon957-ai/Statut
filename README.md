@@ -132,8 +132,16 @@ le reste du site fonctionne normalement.
 2. Dans les variables d'environnement du service Render, ajoutez :
    - `PRONOTE_URL` : l'URL directe de la page Pronote de l'établissement
      (ex: `https://xxxx.index-education.net/pronote/eleve.html?identifiant=XXXX`)
-   - `PRONOTE_USERNAME` : l'identifiant de connexion Pronote (compte élève)
-   - `PRONOTE_PASSWORD` : le mot de passe Pronote correspondant
+   - `PRONOTE_USERNAME` : l'identifiant de connexion (ENT ou Pronote selon le cas)
+   - `PRONOTE_PASSWORD` : le mot de passe correspondant
+   - `PRONOTE_ENT` (uniquement si l'établissement passe par un ENT pour se
+     connecter à Pronote — ouvrez votre lien Pronote en navigation privée : si
+     une page d'ENT/portail du lycée s'affiche avant l'écran Pronote, c'est le
+     cas). Indiquez alors le nom technique de l'ENT utilisé par `pronotepy`,
+     par exemple `ent_auvergnerhonealpe` pour l'ENT Auvergne-Rhône-Alpes.
+     La liste complète des ENT supportés est visible dans le code source de
+     pronotepy (module `pronotepy.ent`). Laissez cette variable vide si la
+     connexion à Pronote se fait directement sans ENT.
 3. Redéployez. Une synchronisation se lance automatiquement 5 secondes après
    le démarrage, puis toutes les 20 minutes.
 4. Dans l'espace admin, le bloc **"Synchronisation Pronote"** affiche le
