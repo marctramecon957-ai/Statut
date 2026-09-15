@@ -17,6 +17,16 @@ function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
+// Convertit une valeur de champ ICS (qui peut etre une simple chaine, mais
+// aussi un objet {val, params} ou un tableau selon les cas) en texte simple.
+function versTexte(valeur) {
+  if (valeur === null || valeur === undefined) return '';
+  if (typeof valeur === 'string') return valeur;
+  if (Array.isArray(valeur)) return valeur.map(versTexte).join(' ');
+  if (typeof valeur === 'object' && 'val' in valeur) return versTexte(valeur.val);
+  return String(valeur);
+}
+
 // Determine le statut d'un evenement a partir de son titre/description.
 // Pronote n'utilise pas le champ STATUS standard de l'ICS pour les
 // annulations : l'information est ecrite dans le texte (ex: "Cours annulé : ...").
@@ -28,7 +38,7 @@ function determinerStatut(texte) {
 }
 
 function nettoyerMatiere(summary) {
-  return (summary || '')
+  return versTexte(summary)
     .replace(/^cours annul[ée]?\s*:?\s*/i, '')
     .replace(/^annul[ée]?\s*:?\s*/i, '')
     .replace(/\(.*?\)\s*$/, '')
@@ -66,7 +76,7 @@ async function lancerSynchronisation() {
       const debut = new Date(ev.start);
       if (debut < lundi || debut >= dimancheSuivant) return; // hors semaine courante
 
-      const texteComplet = `${ev.summary || ''} ${ev.description || ''}`;
+      const texteComplet = `${versTexte(ev.summary)} ${versTexte(ev.description)}`;
       const statut = determinerStatut(texteComplet);
 
       evenements.push({
@@ -75,10 +85,10 @@ async function lancerSynchronisation() {
         heure_debut: `${pad2(debut.getUTCHours())}:${pad2(debut.getUTCMinutes())}`,
         heure_fin: `${pad2(new Date(ev.end).getUTCHours())}:${pad2(new Date(ev.end).getUTCMinutes())}`,
         matiere_nom: nettoyerMatiere(ev.summary),
-        salle: ev.location || '',
-        professeur: ev.description || '',
+        salle: versTexte(ev.location),
+        professeur: versTexte(ev.description),
         statut,
-        commentaire: statut !== 'normal' ? (ev.summary || '') : '',
+        commentaire: statut !== 'normal' ? versTexte(ev.summary) : '',
       });
     });
 
