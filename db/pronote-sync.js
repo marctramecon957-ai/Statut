@@ -6,6 +6,7 @@ const ical = require('node-ical');
 const db = require('./database');
 
 const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const FUSEAU = 'Europe/Paris';
 
 let dernierSync = { date: null, succes: null, erreur: null, nombre: 0 };
 
@@ -27,6 +28,30 @@ function versTexte(valeur) {
   return String(valeur);
 }
 
+// Retire les balises HTML et decode les entites (&lt; &gt; &amp;) que Pronote
+// insere parfois dans la description (notes de cours, devoirs...).
+function nettoyerHtml(texte) {
+  return texte
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Extrait un champ "Label : valeur" jusqu'au prochain label connu ou a la fin
+// du texte. La description Pronote ressemble a :
+// "Matière : X Professeur : Y Groupe : Z Salle : W <notes de cours...>"
+const LABELS_CONNUS = ['Matière', 'Professeur', 'Groupe', 'Salle', 'Partie de classe'];
+function extraireChamp(texte, label) {
+  const autresLabels = LABELS_CONNUS.filter((l) => l !== label).join('|');
+  const regex = new RegExp(`${label}\\s*:\\s*([^]*?)(?=(?:${autresLabels})\\s*:|$)`, 'i');
+  const m = texte.match(regex);
+  return m ? m[1].trim() : '';
+}
+
 // Determine le statut d'un evenement a partir de son titre/description.
 // Pronote n'utilise pas le champ STATUS standard de l'ICS pour les
 // annulations : l'information est ecrite dans le texte (ex: "Cours annulé : ...").
@@ -38,11 +63,28 @@ function determinerStatut(texte) {
 }
 
 function nettoyerMatiere(summary) {
-  return versTexte(summary)
+  // Le titre Pronote ressemble parfois a "MATIERE - PROF - [CLASSE] - <GROUPE> ..."
+  const premierSegment = versTexte(summary).split(' - ')[0];
+  return premierSegment
     .replace(/^cours annul[ée]?\s*:?\s*/i, '')
     .replace(/^annul[ée]?\s*:?\s*/i, '')
-    .replace(/\(.*?\)\s*$/, '')
     .trim() || 'Sans matière';
+}
+
+// Formatte une date dans le fuseau de Paris, quel que soit le fuseau du serveur.
+function formatterDateParis(date) {
+  const partiesDate = new Intl.DateTimeFormat('fr-CA', {
+    timeZone: FUSEAU, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(date); // format fr-CA => AAAA-MM-JJ
+  const partiesHeure = new Intl.DateTimeFormat('fr-FR', {
+    timeZone: FUSEAU, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const heure = partiesHeure.find((p) => p.type === 'hour').value;
+  const minute = partiesHeure.find((p) => p.type === 'minute').value;
+  const jourSemaine = new Intl.DateTimeFormat('fr-FR', { timeZone: FUSEAU, weekday: 'long' }).format(date);
+  const jourCapitalise = jourSemaine.charAt(0).toUpperCase() + jourSemaine.slice(1);
+
+  return { date: partiesDate, heure: `${pad2(heure)}:${pad2(minute)}`, jour: jourCapitalise };
 }
 
 async function lancerSynchronisation() {
@@ -60,13 +102,15 @@ async function lancerSynchronisation() {
     const texteIcs = await reponse.text();
     const data = ical.sync.parseICS(texteIcs);
 
-    const aujourdhui = new Date();
-    const jourSemaineActuel = (aujourdhui.getDay() + 6) % 7; // 0 = lundi
-    const lundi = new Date(aujourdhui);
-    lundi.setHours(0, 0, 0, 0);
-    lundi.setDate(aujourdhui.getDate() - jourSemaineActuel);
-    const dimancheSuivant = new Date(lundi);
-    dimancheSuivant.setDate(lundi.getDate() + 7);
+    // Fenetre de la semaine courante, calculee dans le fuseau de Paris
+    const maintenant = new Date();
+    const auj = formatterDateParis(maintenant);
+    const joursOrdre = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+    const decalageDepuisLundi = joursOrdre.indexOf(auj.jour);
+    const lundiDate = new Date(`${auj.date}T12:00:00`); // midi pour eviter tout souci de bascule DST
+    lundiDate.setDate(lundiDate.getDate() - decalageDepuisLundi);
+    const dimancheSuivant = new Date(lundiDate);
+    dimancheSuivant.setDate(lundiDate.getDate() + 7);
 
     const evenements = [];
 
@@ -74,21 +118,31 @@ async function lancerSynchronisation() {
       if (ev.type !== 'VEVENT' || !ev.start || !ev.end) return;
 
       const debut = new Date(ev.start);
-      if (debut < lundi || debut >= dimancheSuivant) return; // hors semaine courante
+      const fin = new Date(ev.end);
+      if (debut < lundiDate || debut >= dimancheSuivant) return; // hors semaine courante
 
-      const texteComplet = `${versTexte(ev.summary)} ${versTexte(ev.description)}`;
+      const infosDebut = formatterDateParis(debut);
+      const infosFin = formatterDateParis(fin);
+
+      const descriptionBrute = nettoyerHtml(versTexte(ev.description));
+      const summaryBrut = versTexte(ev.summary);
+      const texteComplet = `${summaryBrut} ${descriptionBrute}`;
       const statut = determinerStatut(texteComplet);
 
+      const matiere = extraireChamp(descriptionBrute, 'Matière') || nettoyerMatiere(summaryBrut);
+      const professeur = extraireChamp(descriptionBrute, 'Professeur');
+      const salleDescription = extraireChamp(descriptionBrute, 'Salle');
+
       evenements.push({
-        date: debut.toISOString().slice(0, 10),
-        jour: JOURS_FR[debut.getUTCDay()],
-        heure_debut: `${pad2(debut.getUTCHours())}:${pad2(debut.getUTCMinutes())}`,
-        heure_fin: `${pad2(new Date(ev.end).getUTCHours())}:${pad2(new Date(ev.end).getUTCMinutes())}`,
-        matiere_nom: nettoyerMatiere(ev.summary),
-        salle: versTexte(ev.location),
-        professeur: versTexte(ev.description),
+        date: infosDebut.date,
+        jour: infosDebut.jour,
+        heure_debut: infosDebut.heure,
+        heure_fin: infosFin.heure,
+        matiere_nom: matiere,
+        salle: versTexte(ev.location) || salleDescription,
+        professeur: professeur,
         statut,
-        commentaire: statut !== 'normal' ? versTexte(ev.summary) : '',
+        commentaire: statut !== 'normal' ? nettoyerHtml(summaryBrut) : '',
       });
     });
 
