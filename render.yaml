@@ -3,7 +3,7 @@ services:
     name: valenca-studio-emploi-du-temps
     env: node
     plan: free
-    buildCommand: npm install
+      buildCommand: npm install && pip install -r requirements.txt --break-system-packages
     startCommand: npm start
     envVars:
       - key: NODE_ENV
