@@ -150,25 +150,19 @@
 
       <div class="card admin-card-wide">
         <h2>Synchronisation Pronote</h2>
-        <p class="muted">Récupère automatiquement les cours annulés ou modifiés depuis Pronote, toutes les 20 minutes.</p>
+        <p class="muted">Récupère automatiquement les cours annulés ou modifiés depuis Pronote via l'export iCal officiel, toutes les 20 minutes.</p>
         <div id="pronoteStatut" class="pronote-statut">Chargement du statut...</div>
         <button id="btnPronoteSync" class="btn btn-primary" style="margin-top:12px;">Synchroniser maintenant</button>
 
         <details class="pronote-qr-setup">
-          <summary>Configurer / reconfigurer la connexion par QR code (recommandé si l'établissement utilise un ENT)</summary>
+          <summary>Comment obtenir l'URL iCal Pronote ?</summary>
           <ol class="pronote-qr-steps">
-            <li>Connectez-vous à Pronote normalement dans un navigateur.</li>
-            <li>Allez dans <strong>Mon compte</strong> (ou l'icône en haut à droite) puis cherchez une option du type <strong>« Se connecter avec un compte mobile / un autre appareil »</strong> — un QR code et un code à 4 chiffres s'affichent (valables 10 minutes).</li>
-            <li>Le contenu du QR code doit être collé ci-dessous sous forme de texte (JSON). Si vous ne pouvez pas le lire vous-même, faites une capture d'écran du QR code et demandez de l'aide pour le décoder.</li>
+            <li>Connectez-vous à Pronote dans un navigateur.</li>
+            <li>Allez dans l'onglet <strong>Communication</strong> → <strong>Agenda</strong>.</li>
+            <li>Cliquez sur <strong>« Exporter l'agenda au format iCal »</strong> (en haut à droite).</li>
+            <li>Cochez « Votre emploi du temps », puis copiez l'adresse indiquée sous <strong>« Synchronisation avec le gestionnaire d'agenda »</strong> (elle commence par <code>https://...ical/mesinformations.ics?icalsecurise=...</code>).</li>
+            <li>Cette adresse doit être ajoutée comme variable d'environnement <code>PRONOTE_ICAL_URL</code> sur le serveur (Render). Elle contient un jeton d'accès secret : ne la partagez pas publiquement.</li>
           </ol>
-          <form id="pronoteQrForm">
-            <label>Contenu du QR code (JSON)</label>
-            <textarea id="pronoteQrJson" rows="3" placeholder='{"login":"...","jeton":"...","url":"..."}' required></textarea>
-            <label>Code à 4 chiffres affiché à côté du QR code</label>
-            <input type="text" id="pronoteQrPin" maxlength="4" placeholder="1234" required />
-            <button type="submit" class="btn btn-primary" style="margin-top:10px;">Appairer</button>
-          </form>
-          <p id="pronoteQrResult" class="pronote-qr-result hidden"></p>
         </details>
       </div>
 

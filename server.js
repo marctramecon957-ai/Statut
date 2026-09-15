@@ -6,7 +6,7 @@ const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { analyserPdf } = require('./db/pdf-extract');
-const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique, appairerParQrCode } = require('./db/pronote-sync');
+const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique } = require('./db/pronote-sync');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -249,15 +249,6 @@ app.get('/api/admin/pronote-statut', requireAdmin, (req, res) => {
 app.post('/api/admin/pronote-sync', requireAdmin, async (req, res) => {
   const resultat = await lancerSynchronisation();
   res.json(resultat);
-});
-
-app.post('/api/admin/pronote-qr-pair', requireAdmin, async (req, res) => {
-  const { qrJson, pin } = req.body;
-  if (!qrJson || !pin) return res.status(400).json({ error: 'Donnees du QR code et code PIN requis' });
-
-  const resultat = await appairerParQrCode(qrJson, pin);
-  if (!resultat.success) return res.status(400).json({ error: resultat.error });
-  res.json({ success: true });
 });
 
 // ---------- Pages ----------

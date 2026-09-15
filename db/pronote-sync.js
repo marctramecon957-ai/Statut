@@ -1,60 +1,95 @@
-const { execFile } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
+// Synchronisation Pronote via l'export iCal officiel (fonctionnalite native
+// de Pronote : Communication > Agenda > Exporter au format iCal).
+// Ne necessite ni identifiants, ni ENT, ni librairie tierce fragile :
+// l'URL contient deja un jeton d'acces securise genere par Pronote.
+const ical = require('node-ical');
 const db = require('./database');
 
-const TOKEN_FILE = path.join(__dirname, 'pronote_token.json');
+const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
 let dernierSync = { date: null, succes: null, erreur: null, nombre: 0 };
 
-function tokenExiste() {
-  return fs.existsSync(TOKEN_FILE);
-}
-
 function pronoteConfigure() {
-  // Configure soit via un token deja appaire (QR code), soit via identifiant/mot de passe (+ ENT eventuel)
-  return tokenExiste() || !!(process.env.PRONOTE_URL && process.env.PRONOTE_USERNAME && process.env.PRONOTE_PASSWORD);
+  return !!process.env.PRONOTE_ICAL_URL;
 }
 
-function envAvecToken() {
-  return { ...process.env, PRONOTE_TOKEN_FILE: TOKEN_FILE };
+function pad2(n) {
+  return String(n).padStart(2, '0');
 }
 
-function lancerSynchronisation() {
-  return new Promise((resolve) => {
-    if (!pronoteConfigure()) {
-      dernierSync = { date: new Date().toISOString(), succes: false, erreur: "Pronote n'est pas configure (ni token QR, ni variables d'environnement)", nombre: 0 };
-      return resolve(dernierSync);
+// Determine le statut d'un evenement a partir de son titre/description.
+// Pronote n'utilise pas le champ STATUS standard de l'ICS pour les
+// annulations : l'information est ecrite dans le texte (ex: "Cours annulé : ...").
+function determinerStatut(texte) {
+  const t = (texte || '').toLowerCase();
+  if (t.includes('annul')) return 'annule';
+  if (t.includes('modifi') || t.includes('changement') || t.includes('déplac')) return 'modifie';
+  return 'normal';
+}
+
+function nettoyerMatiere(summary) {
+  return (summary || '')
+    .replace(/^cours annul[ée]?\s*:?\s*/i, '')
+    .replace(/^annul[ée]?\s*:?\s*/i, '')
+    .replace(/\(.*?\)\s*$/, '')
+    .trim() || 'Sans matière';
+}
+
+async function lancerSynchronisation() {
+  if (!pronoteConfigure()) {
+    dernierSync = { date: new Date().toISOString(), succes: false, erreur: "Pronote n'est pas configure (variable PRONOTE_ICAL_URL manquante)", nombre: 0 };
+    return dernierSync;
+  }
+
+  try {
+    const url = process.env.PRONOTE_ICAL_URL;
+    const reponse = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!reponse.ok) {
+      throw new Error(`Le serveur Pronote a repondu avec le code ${reponse.status}`);
     }
+    const texteIcs = await reponse.text();
+    const data = ical.sync.parseICS(texteIcs);
 
-    const scriptPath = path.join(__dirname, '..', 'scripts', 'pronote_sync.py');
-    execFile('python3', [scriptPath], { env: envAvecToken(), timeout: 30000 }, (err, stdout, stderr) => {
-      if (stdout && stdout.trim()) {
-        try {
-          const data = JSON.parse(stdout.trim().split('\n').pop());
-          if (!data.success) {
-            dernierSync = { date: new Date().toISOString(), succes: false, erreur: data.error || 'Erreur inconnue', nombre: 0 };
-            return resolve(dernierSync);
-          }
-          const evenements = data.evenements || [];
-          enregistrerEvenements(evenements);
-          dernierSync = { date: new Date().toISOString(), succes: true, erreur: null, nombre: evenements.length };
-          return resolve(dernierSync);
-        } catch (e) {
-          // stdout n'est pas du JSON valide, on tombe dans la gestion d'erreur ci-dessous
-        }
-      }
+    const aujourdhui = new Date();
+    const jourSemaineActuel = (aujourdhui.getDay() + 6) % 7; // 0 = lundi
+    const lundi = new Date(aujourdhui);
+    lundi.setHours(0, 0, 0, 0);
+    lundi.setDate(aujourdhui.getDate() - jourSemaineActuel);
+    const dimancheSuivant = new Date(lundi);
+    dimancheSuivant.setDate(lundi.getDate() + 7);
 
-      if (err) {
-        dernierSync = { date: new Date().toISOString(), succes: false, erreur: 'Le script de synchronisation a echoue : ' + (stderr || err.message), nombre: 0 };
-        return resolve(dernierSync);
-      }
+    const evenements = [];
 
-      dernierSync = { date: new Date().toISOString(), succes: false, erreur: 'Reponse du script Pronote illisible', nombre: 0 };
-      resolve(dernierSync);
+    Object.values(data).forEach((ev) => {
+      if (ev.type !== 'VEVENT' || !ev.start || !ev.end) return;
+
+      const debut = new Date(ev.start);
+      if (debut < lundi || debut >= dimancheSuivant) return; // hors semaine courante
+
+      const texteComplet = `${ev.summary || ''} ${ev.description || ''}`;
+      const statut = determinerStatut(texteComplet);
+
+      evenements.push({
+        date: debut.toISOString().slice(0, 10),
+        jour: JOURS_FR[debut.getUTCDay()],
+        heure_debut: `${pad2(debut.getUTCHours())}:${pad2(debut.getUTCMinutes())}`,
+        heure_fin: `${pad2(new Date(ev.end).getUTCHours())}:${pad2(new Date(ev.end).getUTCMinutes())}`,
+        matiere_nom: nettoyerMatiere(ev.summary),
+        salle: ev.location || '',
+        professeur: ev.description || '',
+        statut,
+        commentaire: statut !== 'normal' ? (ev.summary || '') : '',
+      });
     });
-  });
+
+    enregistrerEvenements(evenements);
+    dernierSync = { date: new Date().toISOString(), succes: true, erreur: null, nombre: evenements.length };
+  } catch (e) {
+    const messageErreur = (e.cause && e.cause.message) ? `${e.message} (${e.cause.message})` : (e.message || 'Erreur inconnue');
+    dernierSync = { date: new Date().toISOString(), succes: false, erreur: messageErreur, nombre: 0 };
+  }
+
+  return dernierSync;
 }
 
 function enregistrerEvenements(evenements) {
@@ -75,44 +110,13 @@ function enregistrerEvenements(evenements) {
   transaction(evenements);
 }
 
-// Appairage initial par QR code : recoit les donnees du QR + le PIN, tente la
-// connexion, et si elle reussit, sauvegarde le token pour les prochaines synchros.
-function appairerParQrCode(qrJson, pin) {
-  return new Promise((resolve) => {
-    const uuidApp = crypto.randomUUID();
-    const scriptPath = path.join(__dirname, '..', 'scripts', 'pronote_qr_pair.py');
-    const entree = JSON.stringify({ qr_json: qrJson, pin, uuid: uuidApp });
-
-    const child = execFile('python3', [scriptPath], { timeout: 20000 }, (err, stdout, stderr) => {
-      if (stdout && stdout.trim()) {
-        try {
-          const data = JSON.parse(stdout.trim().split('\n').pop());
-          if (data.success) {
-            fs.writeFileSync(TOKEN_FILE, JSON.stringify(data.credentials));
-            return resolve({ success: true });
-          }
-          return resolve({ success: false, error: data.error || 'Erreur inconnue' });
-        } catch (e) {
-          return resolve({ success: false, error: 'Reponse du script illisible' });
-        }
-      }
-      resolve({ success: false, error: 'Le script d\'appairage a echoue : ' + (stderr || (err && err.message) || 'erreur inconnue') });
-    });
-
-    child.stdin.write(entree);
-    child.stdin.end();
-  });
-}
-
 function obtenirStatutSync() {
-  return { ...dernierSync, configure: pronoteConfigure(), methode: tokenExiste() ? 'qrcode' : (pronoteConfigure() ? 'identifiants' : null) };
+  return { ...dernierSync, configure: pronoteConfigure() };
 }
 
 function demarrerSyncPeriodique(intervalleMinutes = 20) {
-  // Toujours programmee : lancerSynchronisation() verifie elle-meme si Pronote
-  // est configure (utile si l'appairage QR code se fait apres le demarrage).
   setTimeout(() => lancerSynchronisation(), 5000);
   setInterval(() => lancerSynchronisation(), intervalleMinutes * 60 * 1000);
 }
 
-module.exports = { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique, pronoteConfigure, appairerParQrCode };
+module.exports = { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique, pronoteConfigure };

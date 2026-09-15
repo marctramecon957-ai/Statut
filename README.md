@@ -120,69 +120,48 @@ github.com.)
 ## 4bis. Activer la synchronisation Pronote (optionnel)
 
 Cette fonctionnalité récupère automatiquement les cours annulés/modifiés
-depuis Pronote. Elle est **entièrement optionnelle** : sans configuration,
-le reste du site fonctionne normalement.
+depuis Pronote, via l'**export iCal officiel** de Pronote (fonctionnalité
+native, aucune librairie tierce ni identifiant de connexion nécessaire).
+Elle est **entièrement optionnelle** : sans configuration, le reste du site
+fonctionne normalement.
 
-1. **Modifier le Build Command sur Render** pour installer aussi Python :
-   remplacez `npm install` par :
-   ```
-   npm install && pip install -r requirements.txt --break-system-packages
-   ```
-   (Les images Node de Render incluent déjà Python 3 et pip.)
-2. Dans les variables d'environnement du service Render, ajoutez :
-   - `PRONOTE_URL` : l'URL directe de la page Pronote de l'établissement
-     (ex: `https://xxxx.index-education.net/pronote/eleve.html?identifiant=XXXX`)
-   - `PRONOTE_USERNAME` : l'identifiant de connexion (ENT ou Pronote selon le cas)
-   - `PRONOTE_PASSWORD` : le mot de passe correspondant
-   - `PRONOTE_ENT` (uniquement si l'établissement passe par un ENT pour se
-     connecter à Pronote — ouvrez votre lien Pronote en navigation privée : si
-     une page d'ENT/portail du lycée s'affiche avant l'écran Pronote, c'est le
-     cas). Indiquez alors le nom technique de l'ENT utilisé par `pronotepy`,
-     par exemple `ent_auvergnerhonealpe` pour l'ENT Auvergne-Rhône-Alpes.
-     La liste complète des ENT supportés est visible dans le code source de
-     pronotepy (module `pronotepy.ent`). Laissez cette variable vide si la
-     connexion à Pronote se fait directement sans ENT.
-3. Redéployez. Une synchronisation se lance automatiquement 5 secondes après
+### Obtenir l'URL iCal
+
+1. Connectez-vous à Pronote dans un navigateur (avec le compte élève).
+2. Allez dans l'onglet **Communication** → **Agenda**.
+3. Cliquez sur **« Exporter l'agenda au format iCal »** (généralement en
+   haut à droite).
+4. Cochez au moins **« Votre emploi du temps »**.
+5. Sous **« Synchronisation avec le gestionnaire d'agenda »**, copiez
+   l'adresse indiquée (elle ressemble à
+   `https://xxxx.index-education.net/pronote/ical/mesinformations.ics?icalsecurise=...`).
+   Cette adresse contient un jeton d'accès secret : ne la partagez pas
+   publiquement, traitez-la comme un mot de passe.
+
+### Configurer sur Render
+
+1. Dans les variables d'environnement du service Render, ajoutez :
+   - `PRONOTE_ICAL_URL` : l'adresse copiée à l'étape précédente.
+2. Redéployez. Une synchronisation se lance automatiquement 5 secondes après
    le démarrage, puis toutes les 20 minutes.
-4. Dans l'espace admin, le bloc **"Synchronisation Pronote"** affiche le
+3. Dans l'espace admin, le bloc **"Synchronisation Pronote"** affiche le
    statut de la dernière synchro (réussie ou en erreur, avec le détail), et
    propose un bouton **"Synchroniser maintenant"** pour forcer une mise à jour.
-5. Sur la frise, un cours annulé apparaît avec un motif rayé, et un cours
+4. Sur la frise, un cours annulé apparaît avec un motif rayé, et un cours
    modifié en orange. Cliquer dessus affiche le détail dans la fenêtre.
 
-### Si la connexion directe/ENT échoue (établissements avec EduConnect)
+**Comment est détecté un cours annulé/modifié ?** Pronote n'utilise pas le
+champ de statut standard du format iCal pour ça : l'information est écrite
+directement dans le titre de l'événement (ex : *"Cours annulé : Mathématiques"*).
+Le site détecte ces mots-clés automatiquement.
 
-Certains établissements passent par **EduConnect**, avec lequel `pronotepy`
-rencontre des bugs connus et non résolus (message d'erreur typique : *"Fail
-to connect with EduConnect: probably wrong login information"* même avec les
-bons identifiants). Dans ce cas, utilisez la **méthode par QR code**, plus
-fiable car elle contourne complètement l'ENT :
-
-1. Dépliez **"Configurer / reconfigurer la connexion par QR code"** dans le
-   bloc Synchronisation Pronote de l'espace admin.
-2. Connectez-vous à Pronote normalement dans un navigateur, puis cherchez
-   dans votre compte une option du type **"Se connecter avec un compte
-   mobile"** ou **"Connexion depuis un autre appareil"** : un QR code et un
-   code à 4 chiffres s'affichent, valables 10 minutes.
-3. Le contenu du QR code doit être fourni sous forme de texte JSON (avec les
-   clés `login`, `jeton` et `url`). La plupart des lecteurs de QR code (y
-   compris l'appareil photo d'un smartphone) affichent ce texte brut en
-   scannant l'image.
-4. Collez ce JSON et le code à 4 chiffres dans le formulaire, puis cliquez
-   sur **"Appairer"**. En cas de succès, un accès permanent est enregistré
-   sur le serveur (fichier `db/pronote_token.json`, jamais commité sur
-   GitHub) et se renouvelle automatiquement à chaque synchronisation — plus
-   besoin de repasser par l'ENT ensuite.
-5. Si le QR code a expiré (plus de 10 minutes) ou si le code à 4 chiffres
-   est incorrect, relancez simplement l'opération avec un nouveau QR code.
-
-**Limites à connaître** : Pronote n'a pas d'API officielle ; cette
-fonctionnalité s'appuie sur la librairie communautaire `pronotepy`, qui
-imite une connexion navigateur classique. Elle peut cesser de fonctionner si
-Pronote change son fonctionnement interne, et certains établissements
-bloquent ce type de connexion automatisée. Ce n'est ni illégal ni contraire
-aux CGU pour un usage personnel, mais ce n'est pas une intégration garantie
-dans la durée.
+**Limites à connaître** : cette fonctionnalité dépend du format exact de
+l'export iCal de Pronote, qui peut varier légèrement d'un établissement à
+l'autre ou évoluer avec le temps. Si la détection d'annulation ne fonctionne
+pas comme attendu, vérifiez le texte exact utilisé par Pronote pour signaler
+une annulation dans votre établissement (regardez le contenu du fichier
+`.ics` téléchargé, par exemple avec le bouton "Exporter" en récupération
+ponctuelle) et faites-le moi savoir pour ajuster la détection si besoin.
 
 ## 5. Structure du projet
 
@@ -193,17 +172,13 @@ emploi-du-temps/
 │   ├── database.js        # Connexion SQLite + création des tables
 │   ├── seed.js            # Création du compte admin par défaut
 │   ├── pdf-extract.js     # Analyse et détection automatique depuis un PDF
-│   └── pronote-sync.js    # Orchestration de la synchronisation Pronote
-├── scripts/
-│   └── pronote_sync.py    # Script Python (pronotepy) appelé par le serveur
-│   └── pronote_qr_pair.py # Script d'appairage initial par QR code
+│   └── pronote-sync.js    # Synchronisation Pronote via export iCal
 ├── public/
 │   ├── index.html         # Page unique (login, emploi du temps, admin)
 │   ├── style.css          # Thème visuel (repris du logo)
 │   ├── app.js             # Logique front-end
 │   └── assets/logo.png    # Logo Valenca Studio
 ├── package.json
-├── requirements.txt       # Dépendance Python (pronotepy)
 ├── render.yaml            # Configuration de déploiement Render
 └── .env.example
 ```

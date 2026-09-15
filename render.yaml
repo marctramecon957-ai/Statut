@@ -3,7 +3,7 @@ services:
     name: valenca-studio-emploi-du-temps
     env: node
     plan: free
-      buildCommand: npm install && pip install -r requirements.txt --break-system-packages
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -13,6 +13,8 @@ services:
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_PASSWORD
+        sync: false
+      - key: PRONOTE_ICAL_URL
         sync: false
     disk:
       name: data
