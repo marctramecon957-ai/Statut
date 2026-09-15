@@ -4,13 +4,13 @@ Se connecte a Pronote (via pronotepy) et recupere les cours de la semaine
 courante (lundi a samedi), avec leur statut (normal / annule / modifie).
 Affiche le resultat en JSON sur stdout pour que le serveur Node puisse le lire.
 
-Variables d'environnement attendues :
-  PRONOTE_URL       - URL Pronote (ex: https://xxxx.index-education.net/pronote/eleve.html?identifiant=XXXX)
-  PRONOTE_USERNAME  - identifiant de connexion (ENT ou Pronote selon le cas)
-  PRONOTE_PASSWORD  - mot de passe correspondant
-  PRONOTE_ENT       - optionnel : nom de l'ENT si l'etablissement en utilise un
-                       (ex: "ent_auvergnerhonealpe"). Laisser vide pour une
-                       connexion directe a Pronote sans ENT.
+Deux methodes de connexion, dans l'ordre de priorite :
+1. Par token (fichier de credentials issu d'un appairage QR code reussi) -
+   fichier PRONOTE_TOKEN_FILE, mis a jour automatiquement a chaque synchro
+   reussie (le token change a chaque connexion).
+2. Par identifiant/mot de passe direct ou via ENT (variables d'environnement
+   PRONOTE_URL / PRONOTE_USERNAME / PRONOTE_PASSWORD / PRONOTE_ENT) - methode
+   de secours, peut echouer si l'etablissement utilise EduConnect.
 """
 import sys
 import os
@@ -27,27 +27,49 @@ try:
 except ImportError:
     erreur("Le module pronotepy n'est pas installe sur le serveur")
 
-url = os.environ.get("PRONOTE_URL")
-username = os.environ.get("PRONOTE_USERNAME")
-password = os.environ.get("PRONOTE_PASSWORD")
-ent_nom = (os.environ.get("PRONOTE_ENT") or "").strip()
+token_file = os.environ.get("PRONOTE_TOKEN_FILE", "")
+client = None
 
-if not url or not username or not password:
-    erreur("Variables PRONOTE_URL / PRONOTE_USERNAME / PRONOTE_PASSWORD manquantes")
+# ---- Methode 1 : connexion par token (issu d'un appairage QR code) ----
+if token_file and os.path.exists(token_file):
+    try:
+        with open(token_file, "r", encoding="utf-8") as f:
+            creds = json.load(f)
+        client = pronotepy.Client.token_login(
+            creds["url"], creds["username"], creds["password"], creds["uuid"]
+        )
+        if client.logged_in:
+            # Le token change a chaque connexion : on sauvegarde le nouveau tout de suite
+            with open(token_file, "w", encoding="utf-8") as f:
+                json.dump(client.export_credentials(), f)
+        else:
+            client = None
+    except Exception:
+        client = None  # on retombera sur la methode 2 ci-dessous
 
-try:
-    if ent_nom:
-        fonction_ent = getattr(pronote_ent, ent_nom, None)
-        if fonction_ent is None:
-            erreur(f"ENT '{ent_nom}' inconnu de pronotepy (verifiez PRONOTE_ENT)")
-        client = pronotepy.Client(url, username=username, password=password, ent=fonction_ent)
-    else:
-        client = pronotepy.Client(url, username=username, password=password)
-except Exception as e:
-    erreur(f"Connexion a Pronote impossible : {e}")
+# ---- Methode 2 : identifiant/mot de passe direct ou via ENT ----
+if client is None:
+    url = os.environ.get("PRONOTE_URL")
+    username = os.environ.get("PRONOTE_USERNAME")
+    password = os.environ.get("PRONOTE_PASSWORD")
+    ent_nom = (os.environ.get("PRONOTE_ENT") or "").strip()
 
-if not client.logged_in:
-    erreur("Identifiants Pronote refuses")
+    if not url or not username or not password:
+        erreur("Aucun token valide et variables PRONOTE_URL / PRONOTE_USERNAME / PRONOTE_PASSWORD manquantes")
+
+    try:
+        if ent_nom:
+            fonction_ent = getattr(pronote_ent, ent_nom, None)
+            if fonction_ent is None:
+                erreur(f"ENT '{ent_nom}' inconnu de pronotepy (verifiez PRONOTE_ENT)")
+            client = pronotepy.Client(url, username=username, password=password, ent=fonction_ent)
+        else:
+            client = pronotepy.Client(url, username=username, password=password)
+    except Exception as e:
+        erreur(f"Connexion a Pronote impossible : {e}")
+
+    if not client.logged_in:
+        erreur("Identifiants Pronote refuses")
 
 aujourdhui = date.today()
 lundi = aujourdhui - timedelta(days=aujourdhui.weekday())
@@ -65,7 +87,6 @@ for lecon in lecons:
     try:
         annule = bool(getattr(lecon, "canceled", False))
         statut_brut = getattr(lecon, "status", None)
-        deplace = bool(getattr(lecon, "outing", False))
 
         statut = "annule" if annule else ("modifie" if statut_brut else "normal")
 
@@ -90,3 +111,4 @@ for lecon in lecons:
         continue  # ignore une lecon mal formee plutot que de tout faire echouer
 
 print(json.dumps({"success": True, "evenements": evenements}))
+

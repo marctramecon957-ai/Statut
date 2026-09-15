@@ -422,6 +422,34 @@ document.getElementById('btnPronoteSync').addEventListener('click', async () => 
   btn.textContent = 'Synchroniser maintenant';
 });
 
+document.getElementById('pronoteQrForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const qrJson = document.getElementById('pronoteQrJson').value.trim();
+  const pin = document.getElementById('pronoteQrPin').value.trim();
+  const resultEl = document.getElementById('pronoteQrResult');
+  const btn = e.target.querySelector('button[type="submit"]');
+
+  resultEl.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = 'Appairage en cours...';
+
+  try {
+    await api('/api/admin/pronote-qr-pair', { method: 'POST', body: JSON.stringify({ qrJson, pin }) });
+    resultEl.textContent = 'Appairage réussi ! Lancez une synchronisation pour vérifier.';
+    resultEl.className = 'pronote-qr-result ok';
+    resultEl.classList.remove('hidden');
+    e.target.reset();
+    await chargerStatutPronote();
+  } catch (err) {
+    resultEl.textContent = err.message;
+    resultEl.className = 'pronote-qr-result erreur';
+    resultEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Appairer';
+  }
+});
+
 // ---- Matières ----
 function renderMatiereList() {
   const ul = document.getElementById('matiereList');

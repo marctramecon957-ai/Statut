@@ -150,6 +150,32 @@ le reste du site fonctionne normalement.
 5. Sur la frise, un cours annulé apparaît avec un motif rayé, et un cours
    modifié en orange. Cliquer dessus affiche le détail dans la fenêtre.
 
+### Si la connexion directe/ENT échoue (établissements avec EduConnect)
+
+Certains établissements passent par **EduConnect**, avec lequel `pronotepy`
+rencontre des bugs connus et non résolus (message d'erreur typique : *"Fail
+to connect with EduConnect: probably wrong login information"* même avec les
+bons identifiants). Dans ce cas, utilisez la **méthode par QR code**, plus
+fiable car elle contourne complètement l'ENT :
+
+1. Dépliez **"Configurer / reconfigurer la connexion par QR code"** dans le
+   bloc Synchronisation Pronote de l'espace admin.
+2. Connectez-vous à Pronote normalement dans un navigateur, puis cherchez
+   dans votre compte une option du type **"Se connecter avec un compte
+   mobile"** ou **"Connexion depuis un autre appareil"** : un QR code et un
+   code à 4 chiffres s'affichent, valables 10 minutes.
+3. Le contenu du QR code doit être fourni sous forme de texte JSON (avec les
+   clés `login`, `jeton` et `url`). La plupart des lecteurs de QR code (y
+   compris l'appareil photo d'un smartphone) affichent ce texte brut en
+   scannant l'image.
+4. Collez ce JSON et le code à 4 chiffres dans le formulaire, puis cliquez
+   sur **"Appairer"**. En cas de succès, un accès permanent est enregistré
+   sur le serveur (fichier `db/pronote_token.json`, jamais commité sur
+   GitHub) et se renouvelle automatiquement à chaque synchronisation — plus
+   besoin de repasser par l'ENT ensuite.
+5. Si le QR code a expiré (plus de 10 minutes) ou si le code à 4 chiffres
+   est incorrect, relancez simplement l'opération avec un nouveau QR code.
+
 **Limites à connaître** : Pronote n'a pas d'API officielle ; cette
 fonctionnalité s'appuie sur la librairie communautaire `pronotepy`, qui
 imite une connexion navigateur classique. Elle peut cesser de fonctionner si
@@ -170,6 +196,7 @@ emploi-du-temps/
 │   └── pronote-sync.js    # Orchestration de la synchronisation Pronote
 ├── scripts/
 │   └── pronote_sync.py    # Script Python (pronotepy) appelé par le serveur
+│   └── pronote_qr_pair.py # Script d'appairage initial par QR code
 ├── public/
 │   ├── index.html         # Page unique (login, emploi du temps, admin)
 │   ├── style.css          # Thème visuel (repris du logo)

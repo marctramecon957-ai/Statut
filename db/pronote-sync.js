@@ -1,24 +1,35 @@
 const { execFile } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const db = require('./database');
+
+const TOKEN_FILE = path.join(__dirname, 'pronote_token.json');
 
 let dernierSync = { date: null, succes: null, erreur: null, nombre: 0 };
 
+function tokenExiste() {
+  return fs.existsSync(TOKEN_FILE);
+}
+
 function pronoteConfigure() {
-  return !!(process.env.PRONOTE_URL && process.env.PRONOTE_USERNAME && process.env.PRONOTE_PASSWORD);
+  // Configure soit via un token deja appaire (QR code), soit via identifiant/mot de passe (+ ENT eventuel)
+  return tokenExiste() || !!(process.env.PRONOTE_URL && process.env.PRONOTE_USERNAME && process.env.PRONOTE_PASSWORD);
+}
+
+function envAvecToken() {
+  return { ...process.env, PRONOTE_TOKEN_FILE: TOKEN_FILE };
 }
 
 function lancerSynchronisation() {
   return new Promise((resolve) => {
     if (!pronoteConfigure()) {
-      dernierSync = { date: new Date().toISOString(), succes: false, erreur: "Pronote n'est pas configure (variables d'environnement manquantes)", nombre: 0 };
+      dernierSync = { date: new Date().toISOString(), succes: false, erreur: "Pronote n'est pas configure (ni token QR, ni variables d'environnement)", nombre: 0 };
       return resolve(dernierSync);
     }
 
     const scriptPath = path.join(__dirname, '..', 'scripts', 'pronote_sync.py');
-    execFile('python3', [scriptPath], { env: process.env, timeout: 30000 }, (err, stdout, stderr) => {
-      // Le script ecrit toujours du JSON sur stdout, meme en cas d'erreur
-      // (il sort juste avec un code non-zero) : on tente de le lire d'abord.
+    execFile('python3', [scriptPath], { env: envAvecToken(), timeout: 30000 }, (err, stdout, stderr) => {
       if (stdout && stdout.trim()) {
         try {
           const data = JSON.parse(stdout.trim().split('\n').pop());
@@ -64,15 +75,44 @@ function enregistrerEvenements(evenements) {
   transaction(evenements);
 }
 
+// Appairage initial par QR code : recoit les donnees du QR + le PIN, tente la
+// connexion, et si elle reussit, sauvegarde le token pour les prochaines synchros.
+function appairerParQrCode(qrJson, pin) {
+  return new Promise((resolve) => {
+    const uuidApp = crypto.randomUUID();
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'pronote_qr_pair.py');
+    const entree = JSON.stringify({ qr_json: qrJson, pin, uuid: uuidApp });
+
+    const child = execFile('python3', [scriptPath], { timeout: 20000 }, (err, stdout, stderr) => {
+      if (stdout && stdout.trim()) {
+        try {
+          const data = JSON.parse(stdout.trim().split('\n').pop());
+          if (data.success) {
+            fs.writeFileSync(TOKEN_FILE, JSON.stringify(data.credentials));
+            return resolve({ success: true });
+          }
+          return resolve({ success: false, error: data.error || 'Erreur inconnue' });
+        } catch (e) {
+          return resolve({ success: false, error: 'Reponse du script illisible' });
+        }
+      }
+      resolve({ success: false, error: 'Le script d\'appairage a echoue : ' + (stderr || (err && err.message) || 'erreur inconnue') });
+    });
+
+    child.stdin.write(entree);
+    child.stdin.end();
+  });
+}
+
 function obtenirStatutSync() {
-  return { ...dernierSync, configure: pronoteConfigure() };
+  return { ...dernierSync, configure: pronoteConfigure(), methode: tokenExiste() ? 'qrcode' : (pronoteConfigure() ? 'identifiants' : null) };
 }
 
 function demarrerSyncPeriodique(intervalleMinutes = 20) {
-  if (!pronoteConfigure()) return;
-  // Premiere synchronisation peu apres le demarrage, puis a intervalle regulier
+  // Toujours programmee : lancerSynchronisation() verifie elle-meme si Pronote
+  // est configure (utile si l'appairage QR code se fait apres le demarrage).
   setTimeout(() => lancerSynchronisation(), 5000);
   setInterval(() => lancerSynchronisation(), intervalleMinutes * 60 * 1000);
 }
 
-module.exports = { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique, pronoteConfigure };
+module.exports = { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique, pronoteConfigure, appairerParQrCode };
