@@ -251,6 +251,40 @@ app.post('/api/admin/pronote-sync', requireAdmin, async (req, res) => {
   res.json(resultat);
 });
 
+// Cree les matieres et creneaux de base a partir des evenements Pronote deja
+// synchronises (utile pour demarrer rapidement sans tout saisir a la main).
+app.post('/api/admin/pronote-vers-creneaux', requireAdmin, (req, res) => {
+  const evenements = db.prepare('SELECT DISTINCT jour, heure_debut, heure_fin, matiere_nom, salle, professeur FROM pronote_evenements ORDER BY jour, heure_debut').all();
+
+  if (evenements.length === 0) {
+    return res.status(400).json({ error: "Aucun evenement Pronote synchronise pour le moment. Cliquez d'abord sur \"Synchroniser maintenant\"." });
+  }
+
+  let creneauxCrees = 0;
+  const transaction = db.transaction(() => {
+    evenements.forEach((e) => {
+      if (!e.matiere_nom || e.matiere_nom === 'Sans matière') return;
+
+      let matiere = db.prepare('SELECT id FROM matieres WHERE LOWER(nom) = LOWER(?)').get(e.matiere_nom);
+      if (!matiere) {
+        const info = db.prepare('INSERT INTO matieres (nom) VALUES (?)').run(e.matiere_nom);
+        matiere = { id: info.lastInsertRowid };
+      }
+
+      const existe = db.prepare('SELECT id FROM creneaux WHERE jour = ? AND heure_debut = ? AND heure_fin = ? AND matiere_id = ?')
+        .get(e.jour, e.heure_debut, e.heure_fin, matiere.id);
+      if (existe) return; // evite les doublons si on relance l'operation
+
+      db.prepare('INSERT INTO creneaux (jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(e.jour, e.heure_debut, e.heure_fin, matiere.id, e.salle || '', e.professeur || '', 'Toutes');
+      creneauxCrees++;
+    });
+  });
+  transaction();
+
+  res.json({ success: true, creneauxCrees });
+});
+
 // ---------- Pages ----------
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();

@@ -150,6 +150,16 @@ fonctionne normalement.
 4. Sur la frise, un cours annulé apparaît avec un motif rayé, et un cours
    modifié en orange. Cliquer dessus affiche le détail dans la fenêtre.
 
+**Important : la synchro Pronote ne crée pas l'emploi du temps toute seule.**
+Elle ajoute seulement les annulations/modifications par-dessus des créneaux
+déjà existants (créés à la main ou via l'import PDF). Si l'emploi du temps
+est vide, utilisez le bouton **"Créer mon emploi du temps à partir de
+Pronote"** (sous le bouton de synchro) : il crée automatiquement les
+matières et créneaux à partir des cours de la semaine récupérés depuis
+Pronote. Vous pourrez ensuite ajuster manuellement la répartition Semaine 1
+/ Semaine 2 pour les cours en alternance, puisque Pronote ne donne que les
+cours d'une semaine à la fois.
+
 **Comment est détecté un cours annulé/modifié ?** Pronote n'utilise pas le
 champ de statut standard du format iCal pour ça : l'information est écrite
 directement dans le titre de l'événement (ex : *"Cours annulé : Mathématiques"*).

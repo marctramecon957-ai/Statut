@@ -422,6 +422,23 @@ document.getElementById('btnPronoteSync').addEventListener('click', async () => 
   btn.textContent = 'Synchroniser maintenant';
 });
 
+document.getElementById('btnPronoteVersCreneaux').addEventListener('click', async () => {
+  const btn = document.getElementById('btnPronoteVersCreneaux');
+  btn.disabled = true;
+  btn.textContent = 'Création en cours...';
+  try {
+    const resultat = await api('/api/admin/pronote-vers-creneaux', { method: 'POST' });
+    alert(`${resultat.creneauxCrees} créneau(x) créé(s) à partir des données Pronote.`);
+    await loadAdminView();
+    renderSchedule();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Créer mon emploi du temps à partir de Pronote';
+  }
+});
+
 // ---- Matières ----
 function renderMatiereList() {
   const ul = document.getElementById('matiereList');
