@@ -1,7 +1,7 @@
 {
   "name": "valenca-studio-emploi-du-temps",
   "version": "1.0.0",
-  "description": "Emploi du temps - Lycee Albert Londres - 1MELEC - Valenca Studio",
+  "description": "Emploi du temps - Lycee Albert Londres - 1MELEC.2 - Valenca Studio",
   "main": "server.js",
   "engines": {
     "node": "20.x"
