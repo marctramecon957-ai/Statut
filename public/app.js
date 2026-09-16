@@ -289,7 +289,7 @@ function renderSchedule() {
       const heightPct = ((minutesDepuisDebutJournee(c.heure_fin) - minutesDepuisDebutJournee(c.heure_debut)) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
       const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
       const classeStatut = evt && evt.statut === 'annule' ? ' annule' : (evt && evt.statut === 'modifie' ? ' modifie' : '');
-      const label = evt && evt.statut === 'annule' ? 'Cours annulé' : (evt && evt.statut === 'modifie' ? 'Modifié' : '');
+      const label = evt && evt.statut === 'annule' ? 'Cours annulé' : (evt && evt.statut === 'modifie' ? 'Cours modifié' : '');
       html += `<div class="time-bar${classeStatut}" data-id="${c.id}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;">${label ? `<span class="time-bar-label">${label}</span>` : ''}</div>`;
     });
 
