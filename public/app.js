@@ -599,6 +599,7 @@ function renderCreneauAdminTable() {
       <td>${escapeHtml(c.professeur || '')}</td>
       <td>
         <button class="icon-btn" data-action="edit" data-id="${c.id}">Modifier</button>
+        <button class="icon-btn" data-action="annuler-jour" data-id="${c.id}">Annulé aujourd'hui</button>
         <button class="icon-btn danger" data-action="delete" data-id="${c.id}">Supprimer</button>
       </td>`;
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
@@ -608,6 +609,17 @@ function renderCreneauAdminTable() {
     });
     tr.querySelector('[data-action="edit"]').addEventListener('click', () => {
       chargerCreneauDansFormulaire(c);
+    });
+    tr.querySelector('[data-action="annuler-jour"]').addEventListener('click', async () => {
+      const dejaAnnule = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+      const nouveauStatut = (dejaAnnule && dejaAnnule.statut === 'annule') ? 'normal' : 'annule';
+      try {
+        await api(`/api/admin/creneaux/${c.id}/statut-jour`, { method: 'POST', body: JSON.stringify({ statut: nouveauStatut }) });
+        await chargerEvenementsPronote();
+        await chargerEvenementsPronoteDebug();
+      } catch (err) {
+        alert(err.message);
+      }
     });
     body.appendChild(tr);
   });

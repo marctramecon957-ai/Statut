@@ -160,14 +160,19 @@ function enregistrerEvenements(evenements) {
   const transaction = db.transaction((liste) => {
     const dates = [...new Set(liste.map((e) => e.date))];
     if (dates.length) {
+      // Ne supprime que les evenements issus d'une synchro automatique
+      // precedente : un marquage manuel (voir /statut-jour) est preserve.
       const placeholders = dates.map(() => '?').join(',');
-      db.prepare(`DELETE FROM pronote_evenements WHERE date IN (${placeholders})`).run(...dates);
+      db.prepare(`DELETE FROM pronote_evenements WHERE date IN (${placeholders}) AND (commentaire IS NULL OR commentaire != 'Marque manuellement')`).run(...dates);
     }
     const insert = db.prepare(`
       INSERT INTO pronote_evenements (date, jour, heure_debut, heure_fin, matiere_nom, salle, professeur, statut, commentaire)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    const dejaManuel = db.prepare(`SELECT 1 FROM pronote_evenements WHERE date = ? AND jour = ? AND heure_debut = ? AND heure_fin = ? AND commentaire = 'Marque manuellement'`);
     liste.forEach((e) => {
+      // Un marquage manuel a priorite sur ce que Pronote renvoie pour ce meme creneau/jour
+      if (dejaManuel.get(e.date, e.jour, e.heure_debut, e.heure_fin)) return;
       insert.run(e.date, e.jour, e.heure_debut, e.heure_fin, e.matiere_nom || '', e.salle || '', e.professeur || '', e.statut || 'normal', e.commentaire || '');
     });
   });

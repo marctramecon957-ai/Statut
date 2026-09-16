@@ -236,6 +236,45 @@ app.delete('/api/admin/creneaux/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// Marque manuellement un creneau comme annule/modifie pour aujourd'hui (secours
+// si la detection automatique via Pronote ne fonctionne pas). Reutilise la
+// table pronote_evenements : le reste du systeme (frise, fenetre de detail)
+// fonctionne alors exactement comme pour une detection automatique.
+app.post('/api/admin/creneaux/:id/statut-jour', requireAdmin, (req, res) => {
+  const { statut } = req.body; // 'annule', 'modifie' ou 'normal' (normal = retirer le marquage)
+  if (!['annule', 'modifie', 'normal'].includes(statut)) {
+    return res.status(400).json({ error: 'Statut invalide' });
+  }
+
+  const creneau = db
+    .prepare(`SELECT c.jour, c.heure_debut, c.heure_fin, m.nom AS matiere_nom, c.salle, c.professeur
+               FROM creneaux c LEFT JOIN matieres m ON m.id = c.matiere_id WHERE c.id = ?`)
+    .get(Number(req.params.id));
+  if (!creneau) return res.status(404).json({ error: 'Creneau introuvable' });
+
+  // Calcule la date du jour du creneau dans la semaine en cours (ex: si le
+  // creneau est un Lundi, on prend le lundi de cette semaine, pas la date du jour actuel).
+  const JOURS_ORDRE = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+  const indexJourCreneau = JOURS_ORDRE.indexOf(creneau.jour);
+  const maintenant = new Date();
+  const indexJourActuel = (maintenant.getDay() + 6) % 7; // 0 = lundi
+  const dateCible = new Date(maintenant);
+  dateCible.setDate(maintenant.getDate() - indexJourActuel + (indexJourCreneau === -1 ? 0 : indexJourCreneau));
+  const dateStr = dateCible.toISOString().slice(0, 10);
+
+  db.prepare('DELETE FROM pronote_evenements WHERE date = ? AND jour = ? AND heure_debut = ? AND heure_fin = ?')
+    .run(dateStr, creneau.jour, creneau.heure_debut, creneau.heure_fin);
+
+  if (statut !== 'normal') {
+    db.prepare(`
+      INSERT INTO pronote_evenements (date, jour, heure_debut, heure_fin, matiere_nom, salle, professeur, statut, commentaire)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(dateStr, creneau.jour, creneau.heure_debut, creneau.heure_fin, creneau.matiere_nom || '', creneau.salle || '', creneau.professeur || '', statut, 'Marque manuellement');
+  }
+
+  res.json({ success: true });
+});
+
 // ---------- PRONOTE ----------
 app.get('/api/pronote-evenements', requireAuth, (req, res) => {
   // Retourne les evenements de la semaine courante (lundi a samedi)
