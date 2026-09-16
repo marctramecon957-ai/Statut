@@ -183,6 +183,17 @@ app.delete('/api/admin/matieres/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+app.put('/api/admin/matieres/:id', requireAdmin, (req, res) => {
+  const { nom } = req.body;
+  if (!nom || !nom.trim()) return res.status(400).json({ error: 'Nom de matiere requis' });
+  try {
+    db.prepare('UPDATE matieres SET nom = ? WHERE id = ?').run(nom.trim(), Number(req.params.id));
+    res.json({ success: true });
+  } catch (e) {
+    res.status(409).json({ error: 'Cette matiere existe deja' });
+  }
+});
+
 // ---------- EMPLOI DU TEMPS ----------
 app.get('/api/creneaux', requireAuth, (req, res) => {
   const rows = db

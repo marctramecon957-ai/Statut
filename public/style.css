@@ -247,11 +247,26 @@ form input:focus, form select:focus { outline: none; border-color: var(--cream);
 
 /* ---------- Indicateur cours annule/modifie sur la frise ---------- */
 .time-bar.annule {
-  background: repeating-linear-gradient(45deg, #6b4a45, #6b4a45 6px, #5a3c38 6px, #5a3c38 12px);
-  opacity: 0.85;
+  background: var(--danger);
+  opacity: 0.9;
 }
 .time-bar.modifie {
   background: #d9b26b;
+}
+.time-bar-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #1b1a19;
+  padding: 2px 4px;
+  line-height: 1.1;
+  overflow: hidden;
+  pointer-events: none;
 }
 .cours-modal-statut {
   display: inline-block;

@@ -59,6 +59,9 @@ modifiant `ADMIN_USERNAME` et `ADMIN_PASSWORD` dans le fichier `.env`.
    professeur) — les horaires proposés vont de 8h à 18h. Pour chaque créneau,
    choisissez s'il a lieu **les deux semaines**, uniquement en **semaine 1**,
    ou uniquement en **semaine 2** (utile pour les emplois du temps alternés).
+   Cliquez sur **"Modifier"** dans le tableau pour corriger un créneau déjà
+   créé (le formulaire se pré-remplit avec ses valeurs) sans avoir à le
+   supprimer et le recréer.
 5. Pour aller plus vite, utilisez l'**import PDF** : uploadez un ancien
    emploi du temps au format PDF. Les créneaux (jour, horaires, matière,
    salle) sont **détectés automatiquement** en analysant la position de
@@ -147,8 +150,9 @@ fonctionne normalement.
 3. Dans l'espace admin, le bloc **"Synchronisation Pronote"** affiche le
    statut de la dernière synchro (réussie ou en erreur, avec le détail), et
    propose un bouton **"Synchroniser maintenant"** pour forcer une mise à jour.
-4. Sur la frise, un cours annulé apparaît avec un motif rayé, et un cours
-   modifié en orange. Cliquer dessus affiche le détail dans la fenêtre.
+4. Sur la frise, un cours annulé apparaît en rouge avec le texte **"Cours
+   annulé"**, et un cours modifié en orange avec **"Modifié"**. Cliquer sur
+   la barre affiche le détail complet dans la fenêtre.
 
 **Important : la synchro Pronote ne crée pas l'emploi du temps toute seule.**
 Elle ajoute seulement les annulations/modifications par-dessus des créneaux

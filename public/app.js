@@ -289,7 +289,8 @@ function renderSchedule() {
       const heightPct = ((minutesDepuisDebutJournee(c.heure_fin) - minutesDepuisDebutJournee(c.heure_debut)) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
       const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
       const classeStatut = evt && evt.statut === 'annule' ? ' annule' : (evt && evt.statut === 'modifie' ? ' modifie' : '');
-      html += `<div class="time-bar${classeStatut}" data-id="${c.id}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;"></div>`;
+      const label = evt && evt.statut === 'annule' ? 'Cours annulé' : (evt && evt.statut === 'modifie' ? 'Modifié' : '');
+      html += `<div class="time-bar${classeStatut}" data-id="${c.id}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;">${label ? `<span class="time-bar-label">${label}</span>` : ''}</div>`;
     });
 
     html += '</div></div>';
@@ -406,6 +407,31 @@ async function chargerStatutPronote() {
   } catch (e) {
     el.textContent = 'Impossible de récupérer le statut Pronote.';
   }
+
+  await chargerEvenementsPronoteDebug();
+}
+
+async function chargerEvenementsPronoteDebug() {
+  const body = document.getElementById('pronoteEvenementsDebugBody');
+  if (!body) return;
+  try {
+    const evenements = await api('/api/pronote-evenements');
+    if (evenements.length === 0) {
+      body.innerHTML = '<tr><td colspan="5" class="muted">Aucun événement récupéré pour le moment.</td></tr>';
+      return;
+    }
+    const statutLabel = { annule: 'Annulé', modifie: 'Modifié', normal: 'Normal' };
+    body.innerHTML = evenements.map(e => `
+      <tr>
+        <td>${escapeHtml(e.jour)}</td>
+        <td>${escapeHtml(e.heure_debut)}</td>
+        <td>${escapeHtml(e.heure_fin)}</td>
+        <td>${escapeHtml(e.matiere_nom || '')}</td>
+        <td>${statutLabel[e.statut] || e.statut}</td>
+      </tr>`).join('');
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="5" class="muted">Impossible de charger les événements.</td></tr>';
+  }
 }
 
 document.getElementById('btnPronoteSync').addEventListener('click', async () => {
@@ -450,10 +476,24 @@ function renderMatiereList() {
   state.matieres.forEach(m => {
     const li = document.createElement('li');
     li.innerHTML = `<span>${escapeHtml(m.nom)}</span>
-      <button class="icon-btn danger" data-id="${m.id}">Supprimer</button>`;
-    li.querySelector('button').addEventListener('click', async () => {
+      <span>
+        <button class="icon-btn" data-action="renommer" data-id="${m.id}">Renommer</button>
+        <button class="icon-btn danger" data-action="supprimer" data-id="${m.id}">Supprimer</button>
+      </span>`;
+    li.querySelector('[data-action="supprimer"]').addEventListener('click', async () => {
       await api(`/api/admin/matieres/${m.id}`, { method: 'DELETE' });
       await loadAdminView();
+    });
+    li.querySelector('[data-action="renommer"]').addEventListener('click', async () => {
+      const nouveauNom = prompt('Nouveau nom de la matière :', m.nom);
+      if (!nouveauNom || !nouveauNom.trim() || nouveauNom.trim() === m.nom) return;
+      try {
+        await api(`/api/admin/matieres/${m.id}`, { method: 'PUT', body: JSON.stringify({ nom: nouveauNom.trim() }) });
+        await loadAdminView();
+        renderSchedule();
+      } catch (err) {
+        alert(err.message);
+      }
     });
     ul.appendChild(li);
   });
@@ -557,18 +597,50 @@ function renderCreneauAdminTable() {
       <td>${semaineLabel[c.semaine] || 'Les deux'}</td>
       <td>${escapeHtml(c.salle || '')}</td>
       <td>${escapeHtml(c.professeur || '')}</td>
-      <td><button class="icon-btn danger" data-id="${c.id}">Supprimer</button></td>`;
-    tr.querySelector('button').addEventListener('click', async () => {
+      <td>
+        <button class="icon-btn" data-action="edit" data-id="${c.id}">Modifier</button>
+        <button class="icon-btn danger" data-action="delete" data-id="${c.id}">Supprimer</button>
+      </td>`;
+    tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       await api(`/api/admin/creneaux/${c.id}`, { method: 'DELETE' });
       await loadAdminView();
       renderSchedule();
+    });
+    tr.querySelector('[data-action="edit"]').addEventListener('click', () => {
+      chargerCreneauDansFormulaire(c);
     });
     body.appendChild(tr);
   });
 }
 
+function chargerCreneauDansFormulaire(c) {
+  document.getElementById('creneauEditId').value = c.id;
+  document.getElementById('creneauJour').value = c.jour;
+  document.getElementById('creneauDebut').value = c.heure_debut;
+  document.getElementById('creneauFin').value = c.heure_fin;
+  document.getElementById('creneauMatiere').value = c.matiere_id || '';
+  document.getElementById('creneauSemaine').value = c.semaine || 'Toutes';
+  document.getElementById('creneauSalle').value = c.salle || '';
+  document.getElementById('creneauProf').value = c.professeur || '';
+
+  const btn = document.getElementById('creneauFormSubmitBtn');
+  btn.textContent = 'Enregistrer les modifications';
+  document.getElementById('creneauFormCancelBtn').classList.remove('hidden');
+  document.getElementById('creneauForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function reinitialiserFormulaireCreneau() {
+  document.getElementById('creneauForm').reset();
+  document.getElementById('creneauEditId').value = '';
+  document.getElementById('creneauFormSubmitBtn').textContent = 'Ajouter le créneau';
+  document.getElementById('creneauFormCancelBtn').classList.add('hidden');
+}
+
+document.getElementById('creneauFormCancelBtn').addEventListener('click', reinitialiserFormulaireCreneau);
+
 document.getElementById('creneauForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const editId = document.getElementById('creneauEditId').value;
   const jour = document.getElementById('creneauJour').value;
   const heure_debut = document.getElementById('creneauDebut').value;
   const heure_fin = document.getElementById('creneauFin').value;
@@ -583,12 +655,18 @@ document.getElementById('creneauForm').addEventListener('submit', async (e) => {
   }
 
   try {
-    await api('/api/admin/creneaux', {
-      method: 'POST',
-      body: JSON.stringify({ jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine }),
-    });
-    document.getElementById('creneauSalle').value = '';
-    document.getElementById('creneauProf').value = '';
+    if (editId) {
+      await api(`/api/admin/creneaux/${editId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine }),
+      });
+    } else {
+      await api('/api/admin/creneaux', {
+        method: 'POST',
+        body: JSON.stringify({ jour, heure_debut, heure_fin, matiere_id, salle, professeur, semaine }),
+      });
+    }
+    reinitialiserFormulaireCreneau();
     await loadAdminView();
     renderSchedule();
   } catch (err) {

@@ -166,6 +166,19 @@
             <li>Cette adresse doit être ajoutée comme variable d'environnement <code>PRONOTE_ICAL_URL</code> sur le serveur (Render). Elle contient un jeton d'accès secret : ne la partagez pas publiquement.</li>
           </ol>
         </details>
+
+        <details class="pronote-qr-setup">
+          <summary>Voir les événements Pronote récupérés cette semaine (pour vérifier une correspondance)</summary>
+          <p class="muted" style="font-size:0.8rem;">Comparez le Jour / Début / Fin ci-dessous avec votre tableau de créneaux plus bas : ils doivent être identiques au caractère près pour qu'une annulation soit détectée et affichée sur la frise.</p>
+          <div class="table-wrap">
+            <table class="schedule-table">
+              <thead>
+                <tr><th>Jour</th><th>Début</th><th>Fin</th><th>Matière</th><th>Statut</th></tr>
+              </thead>
+              <tbody id="pronoteEvenementsDebugBody"></tbody>
+            </table>
+          </div>
+        </details>
       </div>
 
       <div class="card admin-card-wide">
@@ -222,9 +235,10 @@
           </select>
           <input type="text" id="creneauSalle" placeholder="Salle (optionnel)" />
           <input type="text" id="creneauProf" placeholder="Professeur (optionnel)" />
-          <button type="submit" class="btn btn-primary">Ajouter le créneau</button>
+          <button type="submit" id="creneauFormSubmitBtn" class="btn btn-primary">Ajouter le créneau</button>
+          <button type="button" id="creneauFormCancelBtn" class="btn btn-ghost hidden">Annuler la modification</button>
+          <input type="hidden" id="creneauEditId" />
         </form>
-        <input type="hidden" id="creneauEditId" />
         <div class="table-wrap">
           <table class="schedule-table">
             <thead>
