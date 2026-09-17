@@ -96,6 +96,10 @@ async function loadDataAndShowSchedule() {
   renderSchedule();
   showView('schedule');
   chargerEvenementsPronote();
+  mettreAJourBoutonNotif();
+  if ('Notification' in window && Notification.permission === 'granted') {
+    demarrerSurveillanceNotifications();
+  }
 }
 
 // ---- Pronote : evenements de la semaine reelle en cours (annulations, etc.) ----
@@ -213,6 +217,7 @@ document.getElementById('btnLogout').addEventListener('click', async () => {
   await api('/api/logout', { method: 'POST' });
   state.user = null;
   updateUserBar();
+  if (intervalNotifications) { clearInterval(intervalNotifications); intervalNotifications = null; }
   showView('login');
 });
 
@@ -413,9 +418,304 @@ async function loadAdminView() {
   renderMatiereOptions();
   renderUserList();
   renderCreneauAdminTable();
+  renderAdminTimeline();
   setupHeureSelects();
   chargerStatutPronote();
 }
+
+// ================= FRISE ADMIN : GLISSER-DEPOSER POUR DEPLACER =================
+function jourReelAujourdhui() {
+  const idx = (new Date().getDay() + 6) % 7; // 0=lundi
+  return JOURS[idx] || 'Lundi';
+}
+
+function renderAdminTimeline() {
+  const container = document.getElementById('adminTimelineContainer');
+  const labelEl = document.getElementById('adminTimelineDayLabel');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const jour = jourReelAujourdhui();
+  if (labelEl) labelEl.textContent = jour;
+
+  const creneauxJour = creneauxSemaine().filter(c => c.jour === jour);
+  const journeeMin = (HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60;
+
+  const dayWrap = document.createElement('div');
+  dayWrap.className = 'timeline-day-wrap';
+  dayWrap.style.width = '100%';
+
+  let html = `<div class="timeline-day"><div class="timeline-hours">${HEURES_LABELS.map(h => `<span>${h}</span>`).join('')}</div>`;
+  html += `<div class="timeline-track" id="adminTimelineTrack" style="height:420px;">`;
+
+  creneauxJour.forEach(c => {
+    const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+    const verrouille = !!(evt && evt.statut === 'deplace' && evt.commentaire !== 'Marque manuellement');
+
+    let debutAffiche = c.heure_debut;
+    let finAffiche = c.heure_fin;
+    let classeStatut = '';
+    if (evt && evt.statut === 'deplace' && evt.nouvelle_heure_debut) {
+      debutAffiche = evt.nouvelle_heure_debut;
+      finAffiche = evt.nouvelle_heure_fin;
+      classeStatut = ' modifie';
+    } else if (evt && evt.statut === 'annule') {
+      classeStatut = ' annule';
+    } else if (evt && evt.statut === 'modifie') {
+      classeStatut = ' modifie';
+    }
+
+    const topPct = (minutesDepuisDebutJournee(debutAffiche) / journeeMin) * 100;
+    const heightPct = ((minutesDepuisDebutJournee(finAffiche) - minutesDepuisDebutJournee(debutAffiche)) / journeeMin) * 100;
+    const classeDrag = verrouille ? ' verrouille' : ' draggable';
+    const titre = `${c.matiere_nom || 'Sans matière'} — ${debutAffiche} - ${finAffiche}${verrouille ? ' (déplacé automatiquement, non modifiable ici)' : ''}`;
+
+    html += `<div class="time-bar${classeStatut}${classeDrag}" data-id="${c.id}" data-debut="${c.heure_debut}" data-fin="${c.heure_fin}" data-debut-effectif="${debutAffiche}" data-fin-effectif="${finAffiche}" data-verrouille="${verrouille ? '1' : '0'}" title="${escapeHtml(titre)}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;"><span class="time-bar-label">${escapeHtml(c.matiere_nom || 'Sans matière')}</span></div>`;
+  });
+
+  html += '</div></div>';
+  dayWrap.innerHTML = html;
+  container.appendChild(dayWrap);
+
+  if (creneauxJour.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'timeline-empty';
+    empty.textContent = "Aucun créneau aujourd'hui.";
+    container.appendChild(empty);
+  }
+
+  initDragCreneauxAdmin();
+}
+
+function initDragCreneauxAdmin() {
+  const track = document.getElementById('adminTimelineTrack');
+  if (!track) return;
+  const journeeMin = (HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60;
+  const PAS_MINUTES = 5;
+  const LONG_PRESS_MS = 350;
+  const SEUIL_ANNULATION_PX = 8;
+
+  track.querySelectorAll('.time-bar.draggable').forEach(bar => {
+    let pressTimer = null;
+    let dragging = false;
+    let startY = 0;
+    let startTopPct = 0;
+    let trackHeight = 0;
+    let dureeMin = 0;
+    let ghost = null;
+    let nouvelDebutMin = null;
+
+    function minutesVersStr(min) {
+      const total = HEURE_DEBUT_JOURNEE * 60 + min;
+      const h = Math.floor(total / 60);
+      const m = total % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    function annulerPressTimer() {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    }
+
+    function onPointerMove(e) {
+      if (!dragging) {
+        if (Math.abs(e.clientY - startY) > SEUIL_ANNULATION_PX) annulerPressTimer();
+        return;
+      }
+      e.preventDefault();
+      const deltaY = e.clientY - startY;
+      const deltaPct = (deltaY / trackHeight) * 100;
+      let newTopPct = startTopPct + deltaPct;
+      const maxTopPct = ((journeeMin - dureeMin) / journeeMin) * 100;
+      newTopPct = Math.max(0, Math.min(newTopPct, maxTopPct));
+      bar.style.top = `${newTopPct}%`;
+
+      let debutMin = (newTopPct / 100) * journeeMin;
+      debutMin = Math.round(debutMin / PAS_MINUTES) * PAS_MINUTES;
+      debutMin = Math.max(0, Math.min(debutMin, journeeMin - dureeMin));
+      nouvelDebutMin = debutMin;
+
+      if (!ghost) {
+        ghost = document.createElement('div');
+        ghost.className = 'time-bar-ghost-time';
+        bar.appendChild(ghost);
+      }
+      ghost.textContent = `${minutesVersStr(debutMin)} - ${minutesVersStr(debutMin + dureeMin)}`;
+    }
+
+    async function onPointerUp(e) {
+      annulerPressTimer();
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+
+      if (!dragging) return;
+      dragging = false;
+      bar.classList.remove('dragging');
+      if (ghost) { ghost.remove(); ghost = null; }
+
+      if (nouvelDebutMin === null) return;
+      const nouvelle_heure_debut = minutesVersStr(nouvelDebutMin);
+      const nouvelle_heure_fin = minutesVersStr(nouvelDebutMin + dureeMin);
+
+      if (nouvelle_heure_debut === bar.dataset.debutEffectif) {
+        renderAdminTimeline();
+        return;
+      }
+
+      try {
+        await api(`/api/admin/creneaux/${bar.dataset.id}/statut-jour`, {
+          method: 'POST',
+          body: JSON.stringify({ statut: 'deplace', nouvelle_heure_debut, nouvelle_heure_fin, nouvelle_salle: '' }),
+        });
+        await chargerEvenementsPronote();
+        await chargerEvenementsPronoteDebug();
+        renderAdminTimeline();
+      } catch (err) {
+        alert(err.message);
+        renderAdminTimeline();
+      }
+    }
+
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      startY = e.clientY;
+      const trackRect = track.getBoundingClientRect();
+      trackHeight = trackRect.height;
+      startTopPct = parseFloat(bar.style.top) || 0;
+      const debut = bar.dataset.debutEffectif;
+      const fin = bar.dataset.finEffectif;
+      dureeMin = minutesDepuisDebutJournee(fin) - minutesDepuisDebutJournee(debut);
+      nouvelDebutMin = null;
+
+      pressTimer = setTimeout(() => {
+        dragging = true;
+        bar.classList.add('dragging');
+        document.addEventListener('pointermove', onPointerMove, { passive: false });
+        document.addEventListener('pointerup', onPointerUp);
+      }, LONG_PRESS_MS);
+
+      document.addEventListener('pointermove', onPointerMove, { passive: false });
+      document.addEventListener('pointerup', function annulationRapide() {
+        if (!dragging) annulerPressTimer();
+        document.removeEventListener('pointerup', annulationRapide);
+      });
+    });
+  });
+}
+
+// ================= NOTIFICATIONS LOCALES =================
+let intervalNotifications = null;
+
+function cleNotifJour() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function notifsDejaEnvoyees() {
+  try {
+    const raw = localStorage.getItem('notifsEnvoyees_' + cleNotifJour());
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+
+function marquerNotifEnvoyee(cle) {
+  const liste = notifsDejaEnvoyees();
+  liste.push(cle);
+  localStorage.setItem('notifsEnvoyees_' + cleNotifJour(), JSON.stringify(liste));
+}
+
+function envoyerNotification(titre, corps) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    new Notification(titre, { body: corps, icon: '/assets/icon-192.png' });
+  } catch (e) { /* ignore */ }
+}
+
+function creneauxEffectifsAujourdhui() {
+  const jour = jourReelAujourdhui();
+  const liste = creneauxSemaine()
+    .filter(c => c.jour === jour)
+    .map(c => {
+      const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+      if (evt && evt.statut === 'annule') return null;
+      let debut = c.heure_debut;
+      let fin = c.heure_fin;
+      if (evt && evt.statut === 'deplace' && evt.nouvelle_heure_debut) {
+        debut = evt.nouvelle_heure_debut;
+        fin = evt.nouvelle_heure_fin;
+      }
+      return { id: c.id, matiere_nom: c.matiere_nom || 'Sans matière', debut, fin };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.debut.localeCompare(b.debut));
+  return liste;
+}
+
+function heureActuelleStr() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function verifierNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const nowStr = heureActuelleStr();
+  const dejaEnvoyees = notifsDejaEnvoyees();
+  const cours = creneauxEffectifsAujourdhui();
+
+  cours.forEach((c, i) => {
+    const cleDebut = `debut-${c.id}-${c.debut}`;
+    if (c.debut === nowStr && !dejaEnvoyees.includes(cleDebut)) {
+      envoyerNotification('Ton cours commence', `${c.matiere_nom} à ${c.debut}`);
+      marquerNotifEnvoyee(cleDebut);
+    }
+
+    const cleFin = `fin-${c.id}-${c.fin}`;
+    if (c.fin === nowStr && !dejaEnvoyees.includes(cleFin)) {
+      const suivant = cours[i + 1];
+      if (suivant) {
+        const trouMin = minutesDepuisDebutJournee(suivant.debut) - minutesDepuisDebutJournee(c.fin);
+        if (trouMin >= 60) {
+          const h = Math.floor(trouMin / 60);
+          const m = trouMin % 60;
+          const dureeTxt = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+          envoyerNotification('Trou dans l\'emploi du temps', `${dureeTxt} avant ${suivant.matiere_nom} à ${suivant.debut}`);
+        }
+      }
+      marquerNotifEnvoyee(cleFin);
+    }
+  });
+}
+
+function demarrerSurveillanceNotifications() {
+  if (intervalNotifications) clearInterval(intervalNotifications);
+  verifierNotifications();
+  intervalNotifications = setInterval(verifierNotifications, 20000);
+}
+
+function mettreAJourBoutonNotif() {
+  const btn = document.getElementById('btnNotif');
+  if (!btn) return;
+  if (!('Notification' in window)) {
+    btn.classList.add('hidden');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    btn.textContent = '🔔 Notifications activées';
+  } else {
+    btn.textContent = '🔔 Activer les notifications';
+  }
+}
+
+document.getElementById('btnNotif').addEventListener('click', async () => {
+  if (!('Notification' in window)) {
+    alert("Les notifications ne sont pas prises en charge sur cet appareil/navigateur.");
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  mettreAJourBoutonNotif();
+  if (permission === 'granted') {
+    demarrerSurveillanceNotifications();
+    envoyerNotification('Notifications activées', "Tu seras prévenu au début de chaque cours et en cas de trou d'1h ou plus.");
+  }
+});
 
 // ---- Pronote ----
 async function chargerStatutPronote() {

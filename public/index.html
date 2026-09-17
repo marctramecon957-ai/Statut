@@ -98,6 +98,7 @@
           <button type="button" class="week-btn active" data-week="S1">Semaine 1</button>
           <button type="button" class="week-btn" data-week="S2">Semaine 2</button>
         </div>
+        <button id="btnNotif" class="btn btn-ghost">🔔 Activer les notifications</button>
         <button id="btnInstall" class="btn btn-ghost hidden">📲 Installer sur mon téléphone</button>
         <a id="btnAdminLink" class="btn btn-ghost hidden" href="#admin">Espace admin</a>
       </div>
@@ -210,6 +211,13 @@
             <textarea id="pdfExtractedText" readonly rows="8"></textarea>
           </details>
         </div>
+      </div>
+
+      <div class="card admin-card-wide">
+        <h2>Emploi du temps du jour</h2>
+        <p class="muted">Maintenez un cours puis glissez pour le déplacer à une nouvelle heure aujourd'hui. Un cours déjà déplacé automatiquement par Pronote ne peut pas être glissé (utilisez « Annuler le déplacement » via le tableau ci-dessous si besoin).</p>
+        <div id="adminTimelineDayLabel" class="muted" style="margin-top:6px; font-weight:600;"></div>
+        <div id="adminTimelineContainer" class="timeline-container admin-timeline-container"></div>
       </div>
 
       <div class="card admin-card-wide">
