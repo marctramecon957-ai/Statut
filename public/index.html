@@ -243,7 +243,7 @@
           <table class="schedule-table">
             <thead>
               <tr>
-                <th>Jour</th><th>Début</th><th>Fin</th><th>Matière</th><th>Semaine</th><th>Salle</th><th>Professeur</th><th></th>
+                <th>Jour</th><th>Début</th><th>Fin</th><th>Matière</th><th>Semaine</th><th>Salle</th><th>Professeur</th><th style="min-width:280px;"></th>
               </tr>
             </thead>
             <tbody id="creneauAdminBody"></tbody>
@@ -272,6 +272,27 @@
       <p id="coursModalHoraire" class="cours-modal-horaire"></p>
       <p id="coursModalSalle" class="cours-modal-detail hidden"></p>
       <p id="coursModalProf" class="cours-modal-detail hidden"></p>
+    </div>
+  </div>
+
+  <!-- MODALE : DEPLACER UN COURS (admin) -->
+  <div id="deplaceModal" class="modal-overlay hidden">
+    <div class="modal-card card">
+      <button id="deplaceModalClose" class="modal-close-btn" aria-label="Fermer">✕</button>
+      <h2>Déplacer ce cours (aujourd'hui)</h2>
+      <p id="deplaceModalOriginal" class="muted"></p>
+      <form id="deplaceForm" class="deplace-form">
+        <label>Nouvelle heure de début</label>
+        <select id="deplaceDebut"></select>
+        <label>Nouvelle heure de fin</label>
+        <select id="deplaceFin"></select>
+        <label>Nouvelle salle (optionnel)</label>
+        <input type="text" id="deplaceSalle" placeholder="Laisser vide pour garder la salle actuelle" />
+        <div class="deplace-form-actions">
+          <button type="submit" class="btn btn-primary">Confirmer le déplacement</button>
+          <button type="button" id="deplaceAnnulerLien" class="btn btn-ghost">Retirer le déplacement</button>
+        </div>
+      </form>
     </div>
   </div>
 

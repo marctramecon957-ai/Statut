@@ -42,8 +42,11 @@ CREATE TABLE IF NOT EXISTS pronote_evenements (
   matiere_nom TEXT,
   salle TEXT,
   professeur TEXT,
-  statut TEXT NOT NULL DEFAULT 'normal', -- 'normal', 'annule', 'modifie'
+  statut TEXT NOT NULL DEFAULT 'normal', -- 'normal', 'annule', 'modifie', 'deplace'
   commentaire TEXT,
+  nouvelle_heure_debut TEXT, -- utilise seulement si statut = 'deplace'
+  nouvelle_heure_fin TEXT,
+  nouvelle_salle TEXT,
   synced_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 `);
@@ -52,6 +55,18 @@ CREATE TABLE IF NOT EXISTS pronote_evenements (
 const colonnes = db.prepare("PRAGMA table_info(creneaux)").all().map(c => c.name);
 if (!colonnes.includes('semaine')) {
   db.exec("ALTER TABLE creneaux ADD COLUMN semaine TEXT NOT NULL DEFAULT 'Toutes'");
+}
+
+// Migration douce : ajoute les colonnes de deplacement si la base existait avant leur introduction
+const colonnesEvt = db.prepare("PRAGMA table_info(pronote_evenements)").all().map(c => c.name);
+if (!colonnesEvt.includes('nouvelle_heure_debut')) {
+  db.exec("ALTER TABLE pronote_evenements ADD COLUMN nouvelle_heure_debut TEXT");
+}
+if (!colonnesEvt.includes('nouvelle_heure_fin')) {
+  db.exec("ALTER TABLE pronote_evenements ADD COLUMN nouvelle_heure_fin TEXT");
+}
+if (!colonnesEvt.includes('nouvelle_salle')) {
+  db.exec("ALTER TABLE pronote_evenements ADD COLUMN nouvelle_salle TEXT");
 }
 
 module.exports = db;

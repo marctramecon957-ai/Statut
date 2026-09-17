@@ -241,9 +241,17 @@ app.delete('/api/admin/creneaux/:id', requireAdmin, (req, res) => {
 // table pronote_evenements : le reste du systeme (frise, fenetre de detail)
 // fonctionne alors exactement comme pour une detection automatique.
 app.post('/api/admin/creneaux/:id/statut-jour', requireAdmin, (req, res) => {
-  const { statut } = req.body; // 'annule', 'modifie' ou 'normal' (normal = retirer le marquage)
-  if (!['annule', 'modifie', 'normal'].includes(statut)) {
+  const { statut, nouvelle_heure_debut, nouvelle_heure_fin, nouvelle_salle } = req.body; // 'annule', 'modifie', 'deplace' ou 'normal' (normal = retirer le marquage)
+  if (!['annule', 'modifie', 'deplace', 'normal'].includes(statut)) {
     return res.status(400).json({ error: 'Statut invalide' });
+  }
+  if (statut === 'deplace') {
+    if (!nouvelle_heure_debut || !nouvelle_heure_fin) {
+      return res.status(400).json({ error: 'Nouvel horaire requis pour un déplacement' });
+    }
+    if (nouvelle_heure_fin <= nouvelle_heure_debut) {
+      return res.status(400).json({ error: "L'heure de fin doit être après l'heure de début" });
+    }
   }
 
   const creneau = db
@@ -267,9 +275,16 @@ app.post('/api/admin/creneaux/:id/statut-jour', requireAdmin, (req, res) => {
 
   if (statut !== 'normal') {
     db.prepare(`
-      INSERT INTO pronote_evenements (date, jour, heure_debut, heure_fin, matiere_nom, salle, professeur, statut, commentaire)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(dateStr, creneau.jour, creneau.heure_debut, creneau.heure_fin, creneau.matiere_nom || '', creneau.salle || '', creneau.professeur || '', statut, 'Marque manuellement');
+      INSERT INTO pronote_evenements (date, jour, heure_debut, heure_fin, matiere_nom, salle, professeur, statut, commentaire, nouvelle_heure_debut, nouvelle_heure_fin, nouvelle_salle)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      dateStr, creneau.jour, creneau.heure_debut, creneau.heure_fin,
+      creneau.matiere_nom || '', creneau.salle || '', creneau.professeur || '',
+      statut, 'Marque manuellement',
+      statut === 'deplace' ? nouvelle_heure_debut : null,
+      statut === 'deplace' ? nouvelle_heure_fin : null,
+      statut === 'deplace' ? (nouvelle_salle || null) : null
+    );
   }
 
   res.json({ success: true });

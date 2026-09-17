@@ -284,10 +284,28 @@ function renderSchedule() {
     }
     html += '<div class="timeline-track" style="height:360px;">';
 
+    const journeeMin = (HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60;
     creneauxJour.forEach(c => {
-      const topPct = (minutesDepuisDebutJournee(c.heure_debut) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
-      const heightPct = ((minutesDepuisDebutJournee(c.heure_fin) - minutesDepuisDebutJournee(c.heure_debut)) / ((HEURE_FIN_JOURNEE - HEURE_DEBUT_JOURNEE) * 60)) * 100;
       const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+
+      if (evt && evt.statut === 'deplace' && evt.nouvelle_heure_debut && evt.nouvelle_heure_fin) {
+        // Barre d'origine : barree, en pointilles, pour montrer que le cours n'a pas lieu a cette heure-la
+        const topPctOrig = (minutesDepuisDebutJournee(c.heure_debut) / journeeMin) * 100;
+        const heightPctOrig = ((minutesDepuisDebutJournee(c.heure_fin) - minutesDepuisDebutJournee(c.heure_debut)) / journeeMin) * 100;
+        const infoOrig = `${c.matiere_nom || 'Sans matière'} — Déplacé à ${evt.nouvelle_heure_debut} - ${evt.nouvelle_heure_fin}`;
+        html += `<div class="time-bar deplace-origine" data-id="${c.id}" title="${escapeHtml(infoOrig)}" style="top:${topPctOrig}%; height:${Math.max(heightPctOrig, 3.5)}%;"><span class="time-bar-label">${escapeHtml(c.matiere_nom || 'Sans matière')}</span></div>`;
+
+        // Barre au nouvel horaire : c'est la, en vrai, que le cours a lieu
+        const topPctNew = (minutesDepuisDebutJournee(evt.nouvelle_heure_debut) / journeeMin) * 100;
+        const heightPctNew = ((minutesDepuisDebutJournee(evt.nouvelle_heure_fin) - minutesDepuisDebutJournee(evt.nouvelle_heure_debut)) / journeeMin) * 100;
+        const salleAffichee = evt.nouvelle_salle || c.salle;
+        const infoNew = [c.matiere_nom || 'Sans matière', `${evt.nouvelle_heure_debut} - ${evt.nouvelle_heure_fin}`, salleAffichee ? `Salle ${salleAffichee}` : '', c.professeur || '', 'Cours déplacé'].filter(Boolean).join(' — ');
+        html += `<div class="time-bar deplace-nouveau" data-id="${c.id}" data-deplace="1" title="${escapeHtml(infoNew)}" style="top:${topPctNew}%; height:${Math.max(heightPctNew, 3.5)}%;"><span class="time-bar-label">${escapeHtml(c.matiere_nom || 'Sans matière')} (déplacé)</span></div>`;
+        return;
+      }
+
+      const topPct = (minutesDepuisDebutJournee(c.heure_debut) / journeeMin) * 100;
+      const heightPct = ((minutesDepuisDebutJournee(c.heure_fin) - minutesDepuisDebutJournee(c.heure_debut)) / journeeMin) * 100;
       const classeStatut = evt && evt.statut === 'annule' ? ' annule' : (evt && evt.statut === 'modifie' ? ' modifie' : '');
       const label = evt && evt.statut === 'annule' ? 'Cours annulé' : (evt && evt.statut === 'modifie' ? 'Cours modifié' : '');
       const infoBulle = [c.matiere_nom || 'Sans matière', `${c.heure_debut} - ${c.heure_fin}`, c.salle ? `Salle ${c.salle}` : '', c.professeur || '', label].filter(Boolean).join(' — ');
@@ -322,25 +340,35 @@ function renderSchedule() {
 function ouvrirFenetreCours(c) {
   const overlay = document.getElementById('coursModal');
   document.getElementById('coursModalMatiere').textContent = c.matiere_nom || 'Sans matière';
-  document.getElementById('coursModalHoraire').textContent = `${c.heure_debut} - ${c.heure_fin}`;
 
   const statutLigne = document.getElementById('coursModalStatut');
-  const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
-  if (evt && evt.statut === 'annule') {
-    statutLigne.textContent = 'Cours annulé';
-    statutLigne.className = 'cours-modal-statut annule';
-    statutLigne.classList.remove('hidden');
-  } else if (evt && evt.statut === 'modifie') {
-    statutLigne.textContent = evt.commentaire ? `Modifié — ${evt.commentaire}` : 'Cours modifié';
-    statutLigne.className = 'cours-modal-statut modifie';
-    statutLigne.classList.remove('hidden');
-  } else {
-    statutLigne.classList.add('hidden');
-  }
-
   const salleLigne = document.getElementById('coursModalSalle');
-  if (c.salle) { salleLigne.textContent = `Salle ${c.salle}`; salleLigne.classList.remove('hidden'); }
-  else { salleLigne.classList.add('hidden'); }
+  const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+
+  if (evt && evt.statut === 'deplace' && evt.nouvelle_heure_debut) {
+    document.getElementById('coursModalHoraire').textContent = `${evt.nouvelle_heure_debut} - ${evt.nouvelle_heure_fin}`;
+    statutLigne.textContent = `Déplacé — initialement ${c.heure_debut} - ${c.heure_fin}`;
+    statutLigne.className = 'cours-modal-statut deplace';
+    statutLigne.classList.remove('hidden');
+    const salleAffichee = evt.nouvelle_salle || c.salle;
+    if (salleAffichee) { salleLigne.textContent = `Salle ${salleAffichee}`; salleLigne.classList.remove('hidden'); }
+    else { salleLigne.classList.add('hidden'); }
+  } else {
+    document.getElementById('coursModalHoraire').textContent = `${c.heure_debut} - ${c.heure_fin}`;
+    if (evt && evt.statut === 'annule') {
+      statutLigne.textContent = 'Cours annulé';
+      statutLigne.className = 'cours-modal-statut annule';
+      statutLigne.classList.remove('hidden');
+    } else if (evt && evt.statut === 'modifie') {
+      statutLigne.textContent = evt.commentaire ? `Modifié — ${evt.commentaire}` : 'Cours modifié';
+      statutLigne.className = 'cours-modal-statut modifie';
+      statutLigne.classList.remove('hidden');
+    } else {
+      statutLigne.classList.add('hidden');
+    }
+    if (c.salle) { salleLigne.textContent = `Salle ${c.salle}`; salleLigne.classList.remove('hidden'); }
+    else { salleLigne.classList.add('hidden'); }
+  }
 
   const profLigne = document.getElementById('coursModalProf');
   if (c.professeur) { profLigne.textContent = c.professeur; profLigne.classList.remove('hidden'); }
@@ -421,7 +449,7 @@ async function chargerEvenementsPronoteDebug() {
       body.innerHTML = '<tr><td colspan="5" class="muted">Aucun événement récupéré pour le moment.</td></tr>';
       return;
     }
-    const statutLabel = { annule: 'Annulé', modifie: 'Modifié', normal: 'Normal' };
+    const statutLabel = { annule: 'Annulé', modifie: 'Modifié', deplace: 'Déplacé', normal: 'Normal' };
     body.innerHTML = evenements.map(e => `
       <tr>
         <td>${escapeHtml(e.jour)}</td>
@@ -602,6 +630,7 @@ function renderCreneauAdminTable() {
         <button class="icon-btn" data-action="edit" data-id="${c.id}">Modifier</button>
         <button class="icon-btn" data-action="annuler-jour" data-id="${c.id}">Annulé aujourd'hui</button>
         <button class="icon-btn" data-action="modifier-jour" data-id="${c.id}">Modifié aujourd'hui</button>
+        <button class="icon-btn" data-action="deplacer-jour" data-id="${c.id}">Déplacé aujourd'hui</button>
         <button class="icon-btn danger" data-action="delete" data-id="${c.id}">Supprimer</button>
       </td>`;
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
@@ -634,9 +663,83 @@ function renderCreneauAdminTable() {
         alert(err.message);
       }
     });
+    tr.querySelector('[data-action="deplacer-jour"]').addEventListener('click', () => {
+      ouvrirModaleDeplacement(c);
+    });
     body.appendChild(tr);
   });
 }
+
+// ---- Deplacement d'un cours (aujourd'hui) ----
+let creneauEnDeplacement = null;
+
+function ouvrirModaleDeplacement(c) {
+  creneauEnDeplacement = c;
+  const heures = genererHeures();
+  const debutSelect = document.getElementById('deplaceDebut');
+  const finSelect = document.getElementById('deplaceFin');
+  debutSelect.innerHTML = heures.map(h => `<option value="${h}">${h}</option>`).join('');
+  finSelect.innerHTML = heures.map(h => `<option value="${h}">${h}</option>`).join('');
+
+  const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+  const dejaDeplace = evt && evt.statut === 'deplace';
+
+  document.getElementById('deplaceModalOriginal').textContent =
+    `${c.matiere_nom || 'Sans matière'} — actuellement ${c.jour} ${c.heure_debut} - ${c.heure_fin}`;
+  debutSelect.value = dejaDeplace ? evt.nouvelle_heure_debut : c.heure_debut;
+  finSelect.value = dejaDeplace ? evt.nouvelle_heure_fin : c.heure_fin;
+  document.getElementById('deplaceSalle').value = dejaDeplace ? (evt.nouvelle_salle || '') : '';
+  document.getElementById('deplaceAnnulerLien').classList.toggle('hidden', !dejaDeplace);
+
+  document.getElementById('deplaceModal').classList.remove('hidden');
+}
+
+document.getElementById('deplaceModalClose').addEventListener('click', () => {
+  document.getElementById('deplaceModal').classList.add('hidden');
+});
+document.getElementById('deplaceModal').addEventListener('click', (e) => {
+  if (e.target.id === 'deplaceModal') document.getElementById('deplaceModal').classList.add('hidden');
+});
+
+document.getElementById('deplaceForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!creneauEnDeplacement) return;
+  const nouvelle_heure_debut = document.getElementById('deplaceDebut').value;
+  const nouvelle_heure_fin = document.getElementById('deplaceFin').value;
+  const nouvelle_salle = document.getElementById('deplaceSalle').value.trim();
+
+  if (nouvelle_heure_fin <= nouvelle_heure_debut) {
+    alert("L'heure de fin doit être après l'heure de début.");
+    return;
+  }
+
+  try {
+    await api(`/api/admin/creneaux/${creneauEnDeplacement.id}/statut-jour`, {
+      method: 'POST',
+      body: JSON.stringify({ statut: 'deplace', nouvelle_heure_debut, nouvelle_heure_fin, nouvelle_salle }),
+    });
+    document.getElementById('deplaceModal').classList.add('hidden');
+    await chargerEvenementsPronote();
+    await chargerEvenementsPronoteDebug();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+document.getElementById('deplaceAnnulerLien').addEventListener('click', async () => {
+  if (!creneauEnDeplacement) return;
+  try {
+    await api(`/api/admin/creneaux/${creneauEnDeplacement.id}/statut-jour`, {
+      method: 'POST',
+      body: JSON.stringify({ statut: 'normal' }),
+    });
+    document.getElementById('deplaceModal').classList.add('hidden');
+    await chargerEvenementsPronote();
+    await chargerEvenementsPronoteDebug();
+  } catch (err) {
+    alert(err.message);
+  }
+});
 
 function chargerCreneauDansFormulaire(c) {
   document.getElementById('creneauEditId').value = c.id;

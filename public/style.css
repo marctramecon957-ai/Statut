@@ -258,6 +258,19 @@ form input:focus, form select:focus { outline: none; border-color: var(--cream);
 .time-bar.modifie {
   background: #5b9bd5;
 }
+.time-bar.deplace-origine {
+  background: transparent;
+  border: 2px dashed #e0a13b;
+  opacity: 0.75;
+}
+.time-bar.deplace-origine .time-bar-label {
+  color: #e0a13b;
+  text-decoration: line-through;
+}
+.time-bar.deplace-nouveau {
+  background: #e0a13b;
+  box-shadow: 0 0 0 2px rgba(224,161,59,0.35);
+}
 .time-bar-label {
   position: absolute;
   inset: 0;
@@ -283,6 +296,12 @@ form input:focus, form select:focus { outline: none; border-color: var(--cream);
 }
 .cours-modal-statut.annule { background: rgba(224,106,91,0.18); color: #e06a5b; }
 .cours-modal-statut.modifie { background: rgba(91,155,213,0.18); color: #5b9bd5; }
+.cours-modal-statut.deplace { background: rgba(224,161,59,0.18); color: #e0a13b; }
+
+/* ---------- Modale de deplacement (admin) ---------- */
+.deplace-form label { display: block; margin-top: 10px; font-size: 0.82rem; color: var(--cream-dim); }
+.deplace-form select { width: 100%; margin-top: 4px; }
+.deplace-form-actions { display: flex; gap: 10px; margin-top: 18px; }
 
 /* ---------- Impression / export PDF ---------- */
 @media print {
