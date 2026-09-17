@@ -4,9 +4,10 @@ Application web (mobile + ordinateur) pour consulter et gérer l'emploi du temps
 de la classe **1MELEC** du **Lycée Albert Londres**.
 
 - Emploi du temps affiché sous forme de **frise horaire** (8h à 18h) : une
-  barre par cours, sans texte visible dessus — cliquez dessus pour voir le
-  détail (matière, horaire, salle, professeur) dans une **fenêtre qui
-  s'ouvre au premier plan**
+  barre par cours, sans texte visible dessus — survolez avec la souris pour
+  un aperçu rapide (infobulle), cliquez pour voir le détail complet
+  (matière, horaire, salle, professeur) dans une **fenêtre qui s'ouvre au
+  premier plan**
 - Navigation par onglets **Lundi, Mardi, Mercredi, Jeudi, Vendredi, Samedi,
   Semaine** (vue combinée de tous les jours), avec bascule **Semaine 1 /
   Semaine 2**
@@ -61,12 +62,13 @@ modifiant `ADMIN_USERNAME` et `ADMIN_PASSWORD` dans le fichier `.env`.
    ou uniquement en **semaine 2** (utile pour les emplois du temps alternés).
    Cliquez sur **"Modifier"** dans le tableau pour corriger un créneau déjà
    créé (le formulaire se pré-remplit avec ses valeurs) sans avoir à le
-   supprimer et le recréer. Le bouton **"Annulé aujourd'hui"** permet de
-   marquer manuellement un créneau comme annulé pour son jour dans la
-   semaine en cours — utile en secours si la synchronisation Pronote (voir
-   plus bas) ne détecte pas une annulation. Un marquage manuel n'est jamais
-   écrasé par une synchronisation automatique ultérieure ; cliquez à nouveau
-   sur le bouton pour l'annuler (le retirer).
+   supprimer et le recréer. Les boutons **"Annulé aujourd'hui"** et
+   **"Modifié aujourd'hui"** permettent de marquer manuellement un créneau
+   comme annulé ou modifié pour son jour dans la semaine en cours — utile en
+   secours si la synchronisation Pronote (voir plus bas) ne détecte pas un
+   changement. Un marquage manuel n'est jamais écrasé par une
+   synchronisation automatique ultérieure ; cliquez à nouveau sur le bouton
+   pour le retirer.
 5. Pour aller plus vite, utilisez l'**import PDF** : uploadez un ancien
    emploi du temps au format PDF. Les créneaux (jour, horaires, matière,
    salle) sont **détectés automatiquement** en analysant la position de

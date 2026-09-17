@@ -290,7 +290,8 @@ function renderSchedule() {
       const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
       const classeStatut = evt && evt.statut === 'annule' ? ' annule' : (evt && evt.statut === 'modifie' ? ' modifie' : '');
       const label = evt && evt.statut === 'annule' ? 'Cours annulé' : (evt && evt.statut === 'modifie' ? 'Cours modifié' : '');
-      html += `<div class="time-bar${classeStatut}" data-id="${c.id}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;">${label ? `<span class="time-bar-label">${label}</span>` : ''}</div>`;
+      const infoBulle = [c.matiere_nom || 'Sans matière', `${c.heure_debut} - ${c.heure_fin}`, c.salle ? `Salle ${c.salle}` : '', c.professeur || '', label].filter(Boolean).join(' — ');
+      html += `<div class="time-bar${classeStatut}" data-id="${c.id}" title="${escapeHtml(infoBulle)}" style="top:${topPct}%; height:${Math.max(heightPct, 3.5)}%;">${label ? `<span class="time-bar-label">${label}</span>` : ''}</div>`;
     });
 
     html += '</div></div>';
@@ -600,6 +601,7 @@ function renderCreneauAdminTable() {
       <td>
         <button class="icon-btn" data-action="edit" data-id="${c.id}">Modifier</button>
         <button class="icon-btn" data-action="annuler-jour" data-id="${c.id}">Annulé aujourd'hui</button>
+        <button class="icon-btn" data-action="modifier-jour" data-id="${c.id}">Modifié aujourd'hui</button>
         <button class="icon-btn danger" data-action="delete" data-id="${c.id}">Supprimer</button>
       </td>`;
     tr.querySelector('[data-action="delete"]').addEventListener('click', async () => {
@@ -613,6 +615,17 @@ function renderCreneauAdminTable() {
     tr.querySelector('[data-action="annuler-jour"]').addEventListener('click', async () => {
       const dejaAnnule = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
       const nouveauStatut = (dejaAnnule && dejaAnnule.statut === 'annule') ? 'normal' : 'annule';
+      try {
+        await api(`/api/admin/creneaux/${c.id}/statut-jour`, { method: 'POST', body: JSON.stringify({ statut: nouveauStatut }) });
+        await chargerEvenementsPronote();
+        await chargerEvenementsPronoteDebug();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    tr.querySelector('[data-action="modifier-jour"]').addEventListener('click', async () => {
+      const dejaModifie = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
+      const nouveauStatut = (dejaModifie && dejaModifie.statut === 'modifie') ? 'normal' : 'modifie';
       try {
         await api(`/api/admin/creneaux/${c.id}/statut-jour`, { method: 'POST', body: JSON.stringify({ statut: nouveauStatut }) });
         await chargerEvenementsPronote();
