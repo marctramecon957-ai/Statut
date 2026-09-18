@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { analyserPdf } = require('./db/pdf-extract');
 const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique } = require('./db/pronote-sync');
-const { verifierEtEnvoyerNotifications, vapidPublicKey } = require('./db/notifications');
+const { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, vapidPublicKey } = require('./db/notifications');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -241,7 +241,7 @@ app.delete('/api/admin/creneaux/:id', requireAdmin, (req, res) => {
 // si la detection automatique via Pronote ne fonctionne pas). Reutilise la
 // table pronote_evenements : le reste du systeme (frise, fenetre de detail)
 // fonctionne alors exactement comme pour une detection automatique.
-app.post('/api/admin/creneaux/:id/statut-jour', requireAdmin, (req, res) => {
+app.post('/api/admin/creneaux/:id/statut-jour', requireAdmin, async (req, res) => {
   const { statut, nouvelle_heure_debut, nouvelle_heure_fin, nouvelle_salle } = req.body; // 'annule', 'modifie', 'deplace' ou 'normal' (normal = retirer le marquage)
   if (!['annule', 'modifie', 'deplace', 'normal'].includes(statut)) {
     return res.status(400).json({ error: 'Statut invalide' });
@@ -256,7 +256,7 @@ app.post('/api/admin/creneaux/:id/statut-jour', requireAdmin, (req, res) => {
   }
 
   const creneau = db
-    .prepare(`SELECT c.jour, c.heure_debut, c.heure_fin, m.nom AS matiere_nom, c.salle, c.professeur
+    .prepare(`SELECT c.jour, c.heure_debut, c.heure_fin, c.semaine, m.nom AS matiere_nom, c.salle, c.professeur
                FROM creneaux c LEFT JOIN matieres m ON m.id = c.matiere_id WHERE c.id = ?`)
     .get(Number(req.params.id));
   if (!creneau) return res.status(404).json({ error: 'Creneau introuvable' });
@@ -289,6 +289,19 @@ app.post('/api/admin/creneaux/:id/statut-jour', requireAdmin, (req, res) => {
   }
 
   res.json({ success: true });
+
+  // Notification instantanee (best-effort, ne bloque pas la reponse ci-dessus).
+  envoyerNotificationInstantanee({
+    jour: creneau.jour,
+    dateStr,
+    semaine: creneau.semaine || 'Toutes',
+    statut,
+    matiere_nom: creneau.matiere_nom || 'Un cours',
+    heure_debut: creneau.heure_debut,
+    heure_fin: creneau.heure_fin,
+    nouvelle_heure_debut,
+    nouvelle_heure_fin,
+  }).catch(() => {});
 });
 
 // ---------- PRONOTE ----------

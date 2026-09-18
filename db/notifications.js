@@ -121,6 +121,41 @@ async function envoyerPush(subscription, payload) {
   }
 }
 
+async function envoyerNotificationInstantanee({ jour, dateStr, semaine, statut, matiere_nom, heure_debut, heure_fin, nouvelle_heure_debut, nouvelle_heure_fin }) {
+  if (!configurerVapid()) return { envoyees: 0 };
+
+  const { dateStr: aujourdhuiStr } = maintenantParis();
+  const quandTxt = dateStr === aujourdhuiStr ? "aujourd'hui" : jour;
+
+  let titre;
+  let corps;
+  if (statut === 'annule') {
+    titre = 'Cours annulé';
+    corps = `${matiere_nom} ${quandTxt} à ${heure_debut} est annulé.`;
+  } else if (statut === 'deplace') {
+    titre = 'Cours déplacé';
+    corps = `${matiere_nom} ${quandTxt} est déplacé de ${heure_debut} à ${nouvelle_heure_debut}.`;
+  } else if (statut === 'modifie') {
+    titre = 'Cours modifié';
+    corps = `${matiere_nom} ${quandTxt} à ${heure_debut} a été modifié.`;
+  } else {
+    titre = 'Cours rétabli';
+    corps = `${matiere_nom} ${quandTxt} à ${heure_debut} redevient normal.`;
+  }
+
+  const abonnements = db
+    .prepare('SELECT * FROM push_subscriptions')
+    .all()
+    .filter((sub) => semaine === 'Toutes' || sub.semaine === semaine);
+
+  let envoyees = 0;
+  for (const sub of abonnements) {
+    const ok = await envoyerPush(sub, { title: titre, body: corps, tag: `instant-${statut}` });
+    if (ok) envoyees++;
+  }
+  return { envoyees };
+}
+
 async function verifierEtEnvoyerNotifications() {
   if (!configurerVapid()) {
     return { envoyees: 0, erreur: 'VAPID non configure' };
@@ -183,4 +218,4 @@ async function verifierEtEnvoyerNotifications() {
   return { envoyees };
 }
 
-module.exports = { verifierEtEnvoyerNotifications, vapidPublicKey, configurerVapid };
+module.exports = { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, vapidPublicKey, configurerVapid };
