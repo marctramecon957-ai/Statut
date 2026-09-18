@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { analyserPdf } = require('./db/pdf-extract');
 const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique } = require('./db/pronote-sync');
-const { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, vapidPublicKey } = require('./db/notifications');
+const { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey } = require('./db/notifications');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -390,6 +390,17 @@ app.post('/api/push-unsubscribe', requireAuth, (req, res) => {
   if (!endpoint) return res.status(400).json({ error: 'endpoint requis' });
   db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, req.session.user.id);
   res.json({ success: true });
+});
+
+// Envoie une notif de test aux abonnements de l'utilisateur connecte, et
+// renvoie le detail des erreurs eventuelles (utile pour diagnostiquer).
+app.post('/api/push-test', requireAuth, async (req, res) => {
+  try {
+    const resultat = await envoyerNotificationTest(req.session.user.id);
+    res.json(resultat);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Appelee par un cron externe (ex. cron-job.org) toutes les 5 minutes. Pas de

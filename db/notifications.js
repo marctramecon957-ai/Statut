@@ -111,14 +111,36 @@ async function envoyerPush(subscription, payload) {
   };
   try {
     await webpush.sendNotification(pushConfig, JSON.stringify(payload));
-    return true;
+    return { ok: true };
   } catch (err) {
     if (err.statusCode === 404 || err.statusCode === 410) {
       // Abonnement expire ou revoque cote navigateur : on le supprime.
       db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(subscription.id);
     }
-    return false;
+    return { ok: false, statusCode: err.statusCode, message: err.body || err.message };
   }
+}
+
+async function envoyerNotificationTest(userId) {
+  if (!configurerVapid()) {
+    return { envoyees: 0, erreurs: [], erreurGlobale: "Les clés VAPID ne sont pas configurées sur le serveur (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY manquantes)." };
+  }
+  const abonnements = db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(userId);
+  if (abonnements.length === 0) {
+    return { envoyees: 0, erreurs: [], erreurGlobale: "Aucun abonnement push trouvé côté serveur pour ce compte. Réactive les notifications avec le bouton 🔔." };
+  }
+
+  let envoyees = 0;
+  const erreurs = [];
+  for (const sub of abonnements) {
+    const resultat = await envoyerPush(sub, { title: 'Notification de test', body: 'Si tu vois ceci, les notifications push fonctionnent 🎉' });
+    if (resultat.ok) {
+      envoyees++;
+    } else {
+      erreurs.push(`Statut ${resultat.statusCode || '?'} : ${resultat.message || 'erreur inconnue'}`);
+    }
+  }
+  return { envoyees, erreurs, total: abonnements.length };
 }
 
 async function envoyerNotificationInstantanee({ jour, dateStr, semaine, statut, matiere_nom, heure_debut, heure_fin, nouvelle_heure_debut, nouvelle_heure_fin }) {
@@ -150,7 +172,7 @@ async function envoyerNotificationInstantanee({ jour, dateStr, semaine, statut, 
 
   let envoyees = 0;
   for (const sub of abonnements) {
-    const ok = await envoyerPush(sub, { title: titre, body: corps, tag: `instant-${statut}` });
+    const { ok } = await envoyerPush(sub, { title: titre, body: corps, tag: `instant-${statut}` });
     if (ok) envoyees++;
   }
   return { envoyees };
@@ -182,7 +204,7 @@ async function verifierEtEnvoyerNotifications() {
       if (nowMin >= debutMin && nowMin < debutMin + FENETRE_MIN) {
         const cle = `debut-${c.id}-${c.debut}`;
         if (!dejaEnvoye(sub.id, dateStr, cle)) {
-          const ok = await envoyerPush(sub, {
+          const { ok } = await envoyerPush(sub, {
             title: 'Ton cours commence',
             body: `${c.matiere_nom} à ${c.debut}`,
           });
@@ -202,7 +224,7 @@ async function verifierEtEnvoyerNotifications() {
               const h = Math.floor(trouMin / 60);
               const m = trouMin % 60;
               const dureeTxt = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
-              const ok = await envoyerPush(sub, {
+              const { ok } = await envoyerPush(sub, {
                 title: "Trou dans l'emploi du temps",
                 body: `${dureeTxt} avant ${suivant.matiere_nom} à ${suivant.debut}`,
               });
@@ -218,4 +240,4 @@ async function verifierEtEnvoyerNotifications() {
   return { envoyees };
 }
 
-module.exports = { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, vapidPublicKey, configurerVapid };
+module.exports = { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey, configurerVapid };

@@ -672,7 +672,17 @@ document.getElementById('btnNotif').addEventListener('click', async () => {
   try {
     const dejaAbonne = await abonnementPushActuel();
     if (dejaAbonne) {
-      alert('Les notifications sont déjà activées sur cet appareil.');
+      const resultat = await api('/api/push-test', { method: 'POST' });
+      if (resultat.envoyees > 0) {
+        alert(`Notification de test envoyée (${resultat.envoyees}/${resultat.total}). Elle devrait arriver dans quelques secondes, même si tu fermes l'application.`);
+      } else if (resultat.erreurGlobale) {
+        alert('Échec : ' + resultat.erreurGlobale);
+      } else if (resultat.erreurs && resultat.erreurs.length) {
+        alert('Échec de l\'envoi :\n' + resultat.erreurs.join('\n') + '\n\nRéessaie de réactiver les notifications ci-dessous.');
+        await dejaAbonne.unsubscribe().catch(() => {});
+        await activerNotificationsPush();
+        await mettreAJourBoutonNotif();
+      }
       return;
     }
     await activerNotificationsPush();
