@@ -25,6 +25,37 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// ---- Notifications push : recues meme si l'app/onglet est ferme ----
+self.addEventListener('push', (event) => {
+  let data = { title: 'Emploi du temps', body: '' };
+  try {
+    if (event.data) data = event.data.json();
+  } catch (e) {
+    if (event.data) data.body = event.data.text();
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Emploi du temps', {
+      body: data.body || '',
+      icon: '/assets/icon-192.png',
+      badge: '/assets/icon-192.png',
+      tag: data.tag || undefined,
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('/');
+    })
+  );
+});
+
 // Reseau d'abord pour les appels API (donnees toujours a jour), cache pour le reste
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);

@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { analyserPdf } = require('./db/pdf-extract');
 const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique } = require('./db/pronote-sync');
+const { verifierEtEnvoyerNotifications, vapidPublicKey } = require('./db/notifications');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -348,6 +349,48 @@ app.post('/api/admin/pronote-vers-creneaux', requireAdmin, (req, res) => {
   transaction();
 
   res.json({ success: true, creneauxCrees });
+});
+
+// ---------- NOTIFICATIONS PUSH ----------
+app.get('/api/vapid-public-key', requireAuth, (req, res) => {
+  const key = vapidPublicKey();
+  if (!key) return res.status(503).json({ error: 'Notifications push non configurées sur ce serveur' });
+  res.json({ publicKey: key });
+});
+
+app.post('/api/push-subscribe', requireAuth, (req, res) => {
+  const { subscription, semaine } = req.body;
+  if (!subscription || !subscription.endpoint || !subscription.keys) {
+    return res.status(400).json({ error: 'Abonnement invalide' });
+  }
+  const semaineValue = semaine === 'S2' ? 'S2' : 'S1';
+  db.prepare(
+    `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, semaine)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, semaine = excluded.semaine`
+  ).run(req.session.user.id, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, semaineValue);
+  res.json({ success: true });
+});
+
+app.post('/api/push-unsubscribe', requireAuth, (req, res) => {
+  const { endpoint } = req.body;
+  if (!endpoint) return res.status(400).json({ error: 'endpoint requis' });
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, req.session.user.id);
+  res.json({ success: true });
+});
+
+// Appelee par un cron externe (ex. cron-job.org) toutes les 5 minutes. Pas de
+// session ici : protegee par un secret partage passe en query string.
+app.get('/api/cron/verifier-notifications', async (req, res) => {
+  if (!process.env.CRON_SECRET || req.query.secret !== process.env.CRON_SECRET) {
+    return res.status(403).json({ error: 'Secret invalide' });
+  }
+  try {
+    const resultat = await verifierEtEnvoyerNotifications();
+    res.json(resultat);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ---------- Pages ----------

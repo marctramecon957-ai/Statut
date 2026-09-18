@@ -184,6 +184,61 @@ une annulation dans votre établissement (regardez le contenu du fichier
 `.ics` téléchargé, par exemple avec le bouton "Exporter" en récupération
 ponctuelle) et faites-le moi savoir pour ajuster la détection si besoin.
 
+## 4ter. Activer les notifications push (même app fermée)
+
+Les notifications (« ton cours commence », « trou d'1h avant le prochain
+cours ») fonctionnent même quand l'application/le navigateur est fermé, grâce
+au **Web Push** (gratuit, aucun service payant). Il faut deux choses :
+
+### A. Les clés VAPID (identité de ton serveur)
+
+Ajoute ces variables d'environnement sur Render (Render → ton service →
+**Environment**) :
+
+```
+VAPID_PUBLIC_KEY=BI_0tEUn0njAycNI6563Pq66-y2s2bR0ZM4fcW3dLL4vk9IyDtlfXUKQECx9Jf3R5fb5uQX8UQ_A11xsVjgfDVU
+VAPID_PRIVATE_KEY=5AcjzQmwipQzjBL00LJC0etRMIkAPTnGJXFHB2iIr7Y
+VAPID_SUBJECT=mailto:ton-email@exemple.com
+CRON_SECRET=choisis-une-longue-chaine-aleatoire-ici
+```
+
+Ces clés sont fournies prêtes à l'emploi (générées spécialement pour ce
+projet). Tu peux aussi en générer d'autres toi-même avec
+`npx web-push generate-vapid-keys` si tu préfères. `CRON_SECRET` protège la
+route de déclenchement contre un appel par n'importe qui : choisis une valeur
+longue et aléatoire, à toi de la garder secrète.
+
+### B. Le cron externe (le "réveil" toutes les 5 minutes)
+
+Ton serveur ne vérifie l'emploi du temps que quand on l'appelle — il faut donc
+un déclencheur externe et gratuit :
+
+1. Crée un compte gratuit sur [cron-job.org](https://cron-job.org) (ou un
+   service équivalent : EasyCron, UptimeRobot en mode "monitor" HTTP, etc.).
+2. Crée une nouvelle tâche ("cronjob") qui appelle, toutes les **5 minutes**,
+   l'URL :
+   ```
+   https://TON-APP.onrender.com/api/cron/verifier-notifications?secret=TON_CRON_SECRET
+   ```
+   (remplace `TON-APP` par le nom réel de ton service Render, et
+   `TON_CRON_SECRET` par la valeur choisie ci-dessus).
+3. C'est tout — chaque appel vérifie l'heure actuelle pour chaque élève abonné
+   et envoie une notification si un cours commence ou si un trou ≥ 1h démarre.
+
+Cet appel régulier a un effet bonus sur le plan gratuit de Render : il évite
+que le service ne s'endorme après 15 minutes d'inactivité.
+
+### C. Activer côté élève/admin
+
+Dans l'emploi du temps, clique sur **🔔 Activer les notifications**, puis
+accepte la demande d'autorisation du navigateur. C'est un abonnement par
+appareil : à refaire sur chaque téléphone/navigateur où tu veux être notifié.
+
+**Limite à connaître** : Safari sur iPhone nécessite que l'app soit d'abord
+**installée sur l'écran d'accueil** (bouton "📲 Installer sur mon téléphone")
+avant que les notifications push fonctionnent — c'est une restriction
+d'Apple, pas de ce projet.
+
 ## 5. Structure du projet
 
 ```
@@ -193,7 +248,8 @@ emploi-du-temps/
 │   ├── database.js        # Connexion SQLite + création des tables
 │   ├── seed.js            # Création du compte admin par défaut
 │   ├── pdf-extract.js     # Analyse et détection automatique depuis un PDF
-│   └── pronote-sync.js    # Synchronisation Pronote via export iCal
+│   ├── pronote-sync.js    # Synchronisation Pronote via export iCal
+│   └── notifications.js   # Calcul et envoi des notifications push
 ├── public/
 │   ├── index.html         # Page unique (login, emploi du temps, admin)
 │   ├── style.css          # Thème visuel (repris du logo)

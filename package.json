@@ -19,6 +19,7 @@
     "express-session": "^1.18.0",
     "multer": "^2.0.0",
     "node-ical": "^0.27.2",
-    "pdfjs-dist": "^4.0.379"
+    "pdfjs-dist": "^4.0.379",
+    "web-push": "^3.6.7"
   }
 }

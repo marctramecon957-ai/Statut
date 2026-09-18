@@ -49,6 +49,30 @@ CREATE TABLE IF NOT EXISTS pronote_evenements (
   nouvelle_salle TEXT,
   synced_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  endpoint TEXT UNIQUE NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  semaine TEXT NOT NULL DEFAULT 'S1', -- 'S1' ou 'S2', suit le choix fait dans l'app
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Evite de renvoyer deux fois la meme notification push (le cron externe
+-- appelle /api/cron/verifier-notifications toutes les quelques minutes, il
+-- faut donc se souvenir de ce qui a deja ete envoye aujourd'hui).
+CREATE TABLE IF NOT EXISTS push_envois (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subscription_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  cle TEXT NOT NULL,
+  envoye_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (subscription_id) REFERENCES push_subscriptions(id) ON DELETE CASCADE,
+  UNIQUE(subscription_id, date, cle)
+);
 `);
 
 // Migration douce : ajoute la colonne "semaine" si la base existait avant son introduction

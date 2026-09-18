@@ -97,9 +97,6 @@ async function loadDataAndShowSchedule() {
   showView('schedule');
   chargerEvenementsPronote();
   mettreAJourBoutonNotif();
-  if ('Notification' in window && Notification.permission === 'granted') {
-    demarrerSurveillanceNotifications();
-  }
 }
 
 // ---- Pronote : evenements de la semaine reelle en cours (annulations, etc.) ----
@@ -217,7 +214,6 @@ document.getElementById('btnLogout').addEventListener('click', async () => {
   await api('/api/logout', { method: 'POST' });
   state.user = null;
   updateUserBar();
-  if (intervalNotifications) { clearInterval(intervalNotifications); intervalNotifications = null; }
   showView('login');
 });
 
@@ -241,7 +237,21 @@ document.getElementById('weekToggle').addEventListener('click', (e) => {
   localStorage.setItem('semaineActive', state.semaineActive);
   document.querySelectorAll('.week-btn').forEach(b => b.classList.toggle('active', b === btn));
   renderSchedule();
+  mettreAJourSemaineAbonnement();
 });
+
+// Si l'utilisateur a deja active les notifications, garde son abonnement a
+// jour avec la semaine choisie (S1/S2) pour que le serveur sache quels cours lui notifier.
+async function mettreAJourSemaineAbonnement() {
+  try {
+    const abonnement = await abonnementPushActuel();
+    if (!abonnement) return;
+    await api('/api/push-subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ subscription: abonnement.toJSON(), semaine: state.semaineActive }),
+    });
+  } catch (e) { /* pas grave si ca echoue */ }
+}
 
 function syncWeekToggleUI() {
   document.querySelectorAll('.week-btn').forEach(b => b.classList.toggle('active', b.dataset.week === state.semaineActive));
@@ -602,118 +612,74 @@ function initDragCreneauxAdmin() {
   });
 }
 
-// ================= NOTIFICATIONS LOCALES =================
-let intervalNotifications = null;
+// ================= NOTIFICATIONS PUSH (fonctionnent app/navigateur fermes) =================
+// Le navigateur s'abonne aupres du service worker, l'abonnement est envoye au
+// serveur, et un cron externe appelle /api/cron/verifier-notifications toutes
+// les quelques minutes pour declencher les envois via web-push. Voir README.
 
-function cleNotifJour() {
-  return new Date().toISOString().slice(0, 10);
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
 }
 
-function notifsDejaEnvoyees() {
-  try {
-    const raw = localStorage.getItem('notifsEnvoyees_' + cleNotifJour());
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) { return []; }
+async function abonnementPushActuel() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const registration = await navigator.serviceWorker.ready;
+  return registration.pushManager.getSubscription();
 }
 
-function marquerNotifEnvoyee(cle) {
-  const liste = notifsDejaEnvoyees();
-  liste.push(cle);
-  localStorage.setItem('notifsEnvoyees_' + cleNotifJour(), JSON.stringify(liste));
-}
-
-function envoyerNotification(titre, corps) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  try {
-    new Notification(titre, { body: corps, icon: '/assets/icon-192.png' });
-  } catch (e) { /* ignore */ }
-}
-
-function creneauxEffectifsAujourdhui() {
-  const jour = jourReelAujourdhui();
-  const liste = creneauxSemaine()
-    .filter(c => c.jour === jour)
-    .map(c => {
-      const evt = trouverEvenementPronote(c.jour, c.heure_debut, c.heure_fin);
-      if (evt && evt.statut === 'annule') return null;
-      let debut = c.heure_debut;
-      let fin = c.heure_fin;
-      if (evt && evt.statut === 'deplace' && evt.nouvelle_heure_debut) {
-        debut = evt.nouvelle_heure_debut;
-        fin = evt.nouvelle_heure_fin;
-      }
-      return { id: c.id, matiere_nom: c.matiere_nom || 'Sans matière', debut, fin };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.debut.localeCompare(b.debut));
-  return liste;
-}
-
-function heureActuelleStr() {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-}
-
-function verifierNotifications() {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const nowStr = heureActuelleStr();
-  const dejaEnvoyees = notifsDejaEnvoyees();
-  const cours = creneauxEffectifsAujourdhui();
-
-  cours.forEach((c, i) => {
-    const cleDebut = `debut-${c.id}-${c.debut}`;
-    if (c.debut === nowStr && !dejaEnvoyees.includes(cleDebut)) {
-      envoyerNotification('Ton cours commence', `${c.matiere_nom} à ${c.debut}`);
-      marquerNotifEnvoyee(cleDebut);
-    }
-
-    const cleFin = `fin-${c.id}-${c.fin}`;
-    if (c.fin === nowStr && !dejaEnvoyees.includes(cleFin)) {
-      const suivant = cours[i + 1];
-      if (suivant) {
-        const trouMin = minutesDepuisDebutJournee(suivant.debut) - minutesDepuisDebutJournee(c.fin);
-        if (trouMin >= 60) {
-          const h = Math.floor(trouMin / 60);
-          const m = trouMin % 60;
-          const dureeTxt = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
-          envoyerNotification('Trou dans l\'emploi du temps', `${dureeTxt} avant ${suivant.matiere_nom} à ${suivant.debut}`);
-        }
-      }
-      marquerNotifEnvoyee(cleFin);
-    }
-  });
-}
-
-function demarrerSurveillanceNotifications() {
-  if (intervalNotifications) clearInterval(intervalNotifications);
-  verifierNotifications();
-  intervalNotifications = setInterval(verifierNotifications, 20000);
-}
-
-function mettreAJourBoutonNotif() {
+async function mettreAJourBoutonNotif() {
   const btn = document.getElementById('btnNotif');
   if (!btn) return;
-  if (!('Notification' in window)) {
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     btn.classList.add('hidden');
     return;
   }
-  if (Notification.permission === 'granted') {
-    btn.textContent = '🔔 Notifications activées';
-  } else {
-    btn.textContent = '🔔 Activer les notifications';
+  const abonnement = await abonnementPushActuel();
+  btn.textContent = abonnement ? '🔔 Notifications activées' : '🔔 Activer les notifications';
+}
+
+async function activerNotificationsPush() {
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return;
+
+  const { publicKey } = await api('/api/vapid-public-key');
+  const registration = await navigator.serviceWorker.ready;
+
+  let abonnement = await registration.pushManager.getSubscription();
+  if (!abonnement) {
+    abonnement = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
   }
+
+  await api('/api/push-subscribe', {
+    method: 'POST',
+    body: JSON.stringify({ subscription: abonnement.toJSON(), semaine: state.semaineActive }),
+  });
 }
 
 document.getElementById('btnNotif').addEventListener('click', async () => {
-  if (!('Notification' in window)) {
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     alert("Les notifications ne sont pas prises en charge sur cet appareil/navigateur.");
     return;
   }
-  const permission = await Notification.requestPermission();
-  mettreAJourBoutonNotif();
-  if (permission === 'granted') {
-    demarrerSurveillanceNotifications();
-    envoyerNotification('Notifications activées', "Tu seras prévenu au début de chaque cours et en cas de trou d'1h ou plus.");
+  try {
+    const dejaAbonne = await abonnementPushActuel();
+    if (dejaAbonne) {
+      alert('Les notifications sont déjà activées sur cet appareil.');
+      return;
+    }
+    await activerNotificationsPush();
+    await mettreAJourBoutonNotif();
+    alert("Notifications activées ! Tu seras prévenu au début de chaque cours et en cas de trou d'1h ou plus — même si l'application est fermée.");
+  } catch (err) {
+    alert("Impossible d'activer les notifications : " + err.message);
   }
 });
 
