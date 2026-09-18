@@ -676,7 +676,14 @@ document.getElementById('btnNotif').addEventListener('click', async () => {
       if (resultat.envoyees > 0) {
         alert(`Notification de test envoyée (${resultat.envoyees}/${resultat.total}). Elle devrait arriver dans quelques secondes, même si tu fermes l'application.`);
       } else if (resultat.erreurGlobale) {
-        alert('Échec : ' + resultat.erreurGlobale);
+        if (/[Aa]bonnement/.test(resultat.erreurGlobale) && !/VAPID/.test(resultat.erreurGlobale)) {
+          await dejaAbonne.unsubscribe().catch(() => {});
+          await activerNotificationsPush();
+          await mettreAJourBoutonNotif();
+          alert("Ton abonnement n'était pas bien enregistré côté serveur — c'est corrigé, réessaie le bouton 🔔 pour tester à nouveau.");
+        } else {
+          alert('Échec : ' + resultat.erreurGlobale);
+        }
       } else if (resultat.erreurs && resultat.erreurs.length) {
         alert('Échec de l\'envoi :\n' + resultat.erreurs.join('\n') + '\n\nRéessaie de réactiver les notifications ci-dessous.');
         await dejaAbonne.unsubscribe().catch(() => {});
