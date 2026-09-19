@@ -5,10 +5,11 @@ const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const HEURE_DEBUT_JOURNEE = 8;
 
 // Tolerance en minutes : le cron externe appelle cette route toutes les
-// ~5 minutes, donc on considere qu'un evenement "arrive maintenant" s'il est
-// survenu dans les FENETRE_MIN dernieres minutes, pour ne rien manquer entre
-// deux appels tout en ne notifiant qu'une seule fois (grace a push_envois).
-const FENETRE_MIN = 7;
+// ~5 minutes, mais peut avoir du retard (services gratuits). On considere
+// qu'un evenement "arrive maintenant" s'il est survenu dans les FENETRE_MIN
+// dernieres minutes, pour ne rien manquer entre deux appels tout en ne
+// notifiant qu'une seule fois (grace a push_envois).
+const FENETRE_MIN = 15;
 
 let vapideConfigure = false;
 function configurerVapid() {
@@ -199,6 +200,8 @@ async function verifierEtEnvoyerNotifications() {
       const c = cours[i];
       const debutMin = minutesDepuisDebutJournee(c.debut);
       const finMin = minutesDepuisDebutJournee(c.fin);
+      const suivant = cours[i + 1];
+      const trouMin = suivant ? minutesDepuisDebutJournee(suivant.debut) - finMin : null;
 
       // Debut de cours
       if (nowMin >= debutMin && nowMin < debutMin + FENETRE_MIN) {
@@ -213,25 +216,36 @@ async function verifierEtEnvoyerNotifications() {
         }
       }
 
-      // Trou avant le prochain cours
-      if (nowMin >= finMin && nowMin < finMin + FENETRE_MIN) {
-        const suivant = cours[i + 1];
-        if (suivant) {
-          const trouMin = minutesDepuisDebutJournee(suivant.debut) - finMin;
-          if (trouMin >= 60) {
-            const cle = `fin-${c.id}-${c.fin}`;
-            if (!dejaEnvoye(sub.id, dateStr, cle)) {
-              const h = Math.floor(trouMin / 60);
-              const m = trouMin % 60;
-              const dureeTxt = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
-              const { ok } = await envoyerPush(sub, {
-                title: "Trou dans l'emploi du temps",
-                body: `${dureeTxt} avant ${suivant.matiere_nom} à ${suivant.debut}`,
-              });
-              if (ok) envoyees++;
-              marquerEnvoye(sub.id, dateStr, cle);
-            }
-          }
+      // Fin de cours (uniquement si ce n'est pas suivi d'un trou notifie a part,
+      // pour eviter d'envoyer deux notifications au meme moment)
+      if (nowMin >= finMin && nowMin < finMin + FENETRE_MIN && !(trouMin !== null && trouMin >= 60)) {
+        const cle = `fin-${c.id}-${c.fin}`;
+        if (!dejaEnvoye(sub.id, dateStr, cle)) {
+          const corps = suivant
+            ? `${c.matiere_nom} se termine à ${c.fin}. Prochain cours : ${suivant.matiere_nom} à ${suivant.debut}.`
+            : `${c.matiere_nom} se termine à ${c.fin}. Plus de cours aujourd'hui.`;
+          const { ok } = await envoyerPush(sub, {
+            title: 'Ton cours se termine',
+            body: corps,
+          });
+          if (ok) envoyees++;
+          marquerEnvoye(sub.id, dateStr, cle);
+        }
+      }
+
+      // Trou d'1h ou plus avant le prochain cours
+      if (nowMin >= finMin && nowMin < finMin + FENETRE_MIN && trouMin !== null && trouMin >= 60) {
+        const cle = `trou-${c.id}-${c.fin}`;
+        if (!dejaEnvoye(sub.id, dateStr, cle)) {
+          const h = Math.floor(trouMin / 60);
+          const m = trouMin % 60;
+          const dureeTxt = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+          const { ok } = await envoyerPush(sub, {
+            title: "Trou dans l'emploi du temps",
+            body: `${dureeTxt} de libre avant ${suivant.matiere_nom} à ${suivant.debut}.`,
+          });
+          if (ok) envoyees++;
+          marquerEnvoye(sub.id, dateStr, cle);
         }
       }
     }
