@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { analyserPdf } = require('./db/pdf-extract');
 const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique } = require('./db/pronote-sync');
-const { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey } = require('./db/notifications');
+const { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey, marquerPushRecu, statutPushConfirm } = require('./db/notifications');
 const telegram = require('./db/telegram');
 const db = require('./db/database');
 
@@ -417,6 +417,22 @@ app.get('/api/cron/verifier-notifications', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Appelee par le service worker des reception d'un push (avant meme
+// d'afficher la notif) : confirme que la livraison a bien atteint le
+// telephone. Pas d'auth (le service worker n'a pas forcement le cookie de
+// session dans ce contexte) : l'id est un jeton aleatoire non devinable.
+app.post('/api/push-recu', (req, res) => {
+  const { id } = req.body || {};
+  if (id) marquerPushRecu(id);
+  res.json({ success: true });
+});
+
+app.get('/api/push-confirm-statut', requireAuth, (req, res) => {
+  const { id } = req.query;
+  if (!id) return res.status(400).json({ error: 'id requis' });
+  res.json(statutPushConfirm(id));
 });
 
 // ---------- NOTIFICATIONS TELEGRAM (alternative au push, moins fragile) ----------

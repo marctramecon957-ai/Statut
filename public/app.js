@@ -706,6 +706,18 @@ document.getElementById('btnTelegram').addEventListener('click', async () => {
   }
 });
 
+// Interroge le statut de confirmation toutes les secondes pendant 15s max.
+async function attendreConfirmationPush(confirmId) {
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const { recu } = await api(`/api/push-confirm-statut?id=${encodeURIComponent(confirmId)}`);
+      if (recu) return true;
+    } catch (e) { /* on reessaie */ }
+  }
+  return false;
+}
+
 document.getElementById('btnNotif').addEventListener('click', async () => {
   if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     alert("Les notifications ne sont pas prises en charge sur cet appareil/navigateur.");
@@ -716,7 +728,17 @@ document.getElementById('btnNotif').addEventListener('click', async () => {
     if (dejaAbonne) {
       const resultat = await api('/api/push-test', { method: 'POST' });
       if (resultat.envoyees > 0) {
-        alert(`Notification de test envoyée (${resultat.envoyees}/${resultat.total}). Elle devrait arriver dans quelques secondes, même si tu fermes l'application.`);
+        if (resultat.confirmIds && resultat.confirmIds.length) {
+          alert(`Notification de test envoyée. Vérification en cours pendant 15 secondes pour confirmer qu'elle arrive bien sur ce téléphone...`);
+          const recu = await attendreConfirmationPush(resultat.confirmIds[0]);
+          if (recu) {
+            alert("✅ Confirmé : la notification a bien été reçue sur ce téléphone. Si tu ne l'as pas vue s'afficher, regarde dans le volet de notifications (elle a pu être groupée avec une précédente).");
+          } else {
+            alert("❌ La notification a été envoyée par le serveur et acceptée par Google, mais n'est jamais arrivée sur ce téléphone après 15 secondes. Ce n'est donc pas un bug de l'application : c'est un blocage entre ce téléphone et Google (Play Services), indépendant du navigateur utilisé.");
+          }
+        } else {
+          alert(`Notification de test envoyée (${resultat.envoyees}/${resultat.total}). Elle devrait arriver dans quelques secondes, même si tu fermes l'application.`);
+        }
       } else if (resultat.erreurGlobale) {
         if (!/VAPID/.test(resultat.erreurGlobale)) {
           await dejaAbonne.unsubscribe().catch(() => {});

@@ -62,10 +62,18 @@ async function envoyerNotificationTest(userId) {
 
   let envoyees = 0;
   const erreurs = [];
+  const confirmIds = [];
   for (const sub of abonnements) {
-    const resultat = await envoyerPush(sub, { title: 'Notification de test', body: 'Si tu vois ceci, les notifications push fonctionnent 🎉' });
+    const confirmId = `${sub.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    db.prepare('INSERT INTO push_confirmations (id, subscription_id) VALUES (?, ?)').run(confirmId, sub.id);
+    const resultat = await envoyerPush(sub, {
+      title: 'Notification de test',
+      body: 'Si tu vois ceci, les notifications push fonctionnent 🎉',
+      confirmId,
+    });
     if (resultat.ok) {
       envoyees++;
+      confirmIds.push(confirmId);
     } else {
       erreurs.push(`Push : statut ${resultat.statusCode || '?'} : ${resultat.message || 'erreur inconnue'}`);
     }
@@ -87,7 +95,7 @@ async function envoyerNotificationTest(userId) {
     return { envoyees: 0, erreurs: [], erreurGlobale: "Aucun moyen de notification n'est lié à ce compte (ni push, ni Telegram). Réactive-en un dans l'app." };
   }
 
-  return { envoyees, erreurs, total: abonnements.length + (telegramLie ? 1 : 0), telegramOk, telegramLie: !!telegramLie };
+  return { envoyees, erreurs, total: abonnements.length + (telegramLie ? 1 : 0), telegramOk, telegramLie: !!telegramLie, confirmIds };
 }
 
 async function envoyerNotificationInstantanee({ jour, dateStr, semaine, statut, matiere_nom, heure_debut, heure_fin, nouvelle_heure_debut, nouvelle_heure_fin }) {
@@ -206,4 +214,13 @@ async function verifierEtEnvoyerNotifications() {
   return { envoyees };
 }
 
-module.exports = { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey, configurerVapid };
+function marquerPushRecu(confirmId) {
+  db.prepare("UPDATE push_confirmations SET recu_at = CURRENT_TIMESTAMP WHERE id = ? AND recu_at IS NULL").run(confirmId);
+}
+
+function statutPushConfirm(confirmId) {
+  const row = db.prepare('SELECT recu_at FROM push_confirmations WHERE id = ?').get(confirmId);
+  return { recu: !!(row && row.recu_at) };
+}
+
+module.exports = { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey, configurerVapid, marquerPushRecu, statutPushConfirm };

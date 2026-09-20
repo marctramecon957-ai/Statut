@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS telegram_offset (
   offset_id INTEGER NOT NULL DEFAULT 0
 );
 INSERT OR IGNORE INTO telegram_offset (id, offset_id) VALUES (1, 0);
+
+-- Diagnostic : confirme qu'une notification push a bien ete recue par le
+-- service worker sur le telephone (et pas seulement acceptee par le service
+-- de push type FCM, ce qui ne garantit pas la livraison reelle).
+CREATE TABLE IF NOT EXISTS push_confirmations (
+  id TEXT PRIMARY KEY,
+  subscription_id INTEGER NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  recu_at TEXT
+);
 `);
 
 // Migration douce : ajoute la colonne "semaine" si la base existait avant son introduction

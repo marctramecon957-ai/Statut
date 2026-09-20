@@ -1,4 +1,4 @@
-const CACHE_NAME = 'valenca-studio-v1';
+const CACHE_NAME = 'valenca-studio-v2';
 const APP_SHELL = [
   '/',
   '/style.css',
@@ -34,14 +34,28 @@ self.addEventListener('push', (event) => {
     if (event.data) data.body = event.data.text();
   }
 
-  event.waitUntil(
+  const taches = [
     self.registration.showNotification(data.title || 'Emploi du temps', {
       body: data.body || '',
       icon: '/assets/icon-192.png',
       badge: '/assets/icon-192.png',
       tag: data.tag || undefined,
-    })
-  );
+    }),
+  ];
+
+  // Diagnostic : confirme au serveur que ce push a bien ete recu sur ce
+  // telephone, meme si l'affichage echoue pour une raison quelconque.
+  if (data.confirmId) {
+    taches.push(
+      fetch('/api/push-recu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: data.confirmId }),
+      }).catch(() => {})
+    );
+  }
+
+  event.waitUntil(Promise.all(taches));
 });
 
 self.addEventListener('notificationclick', (event) => {
