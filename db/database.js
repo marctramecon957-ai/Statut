@@ -119,7 +119,9 @@ CREATE TABLE IF NOT EXISTS push_confirmations (
   id TEXT PRIMARY KEY,
   subscription_id INTEGER NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  recu_at TEXT
+  recu_at TEXT,
+  notif_ok INTEGER,
+  notif_erreur TEXT
 );
 `);
 
@@ -139,6 +141,15 @@ if (!colonnesEvt.includes('nouvelle_heure_fin')) {
 }
 if (!colonnesEvt.includes('nouvelle_salle')) {
   db.exec("ALTER TABLE pronote_evenements ADD COLUMN nouvelle_salle TEXT");
+}
+
+// Migration douce : ajoute les colonnes de diagnostic si la base existait avant leur introduction
+const colonnesConfirm = db.prepare("PRAGMA table_info(push_confirmations)").all().map(c => c.name);
+if (!colonnesConfirm.includes('notif_ok')) {
+  db.exec("ALTER TABLE push_confirmations ADD COLUMN notif_ok INTEGER");
+}
+if (!colonnesConfirm.includes('notif_erreur')) {
+  db.exec("ALTER TABLE push_confirmations ADD COLUMN notif_erreur TEXT");
 }
 
 module.exports = db;

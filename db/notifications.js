@@ -214,13 +214,19 @@ async function verifierEtEnvoyerNotifications() {
   return { envoyees };
 }
 
-function marquerPushRecu(confirmId) {
-  db.prepare("UPDATE push_confirmations SET recu_at = CURRENT_TIMESTAMP WHERE id = ? AND recu_at IS NULL").run(confirmId);
+function marquerPushRecu(confirmId, notifOk, notifErreur) {
+  db.prepare(
+    "UPDATE push_confirmations SET recu_at = CURRENT_TIMESTAMP, notif_ok = ?, notif_erreur = ? WHERE id = ? AND recu_at IS NULL"
+  ).run(notifOk === false ? 0 : 1, notifErreur || null, confirmId);
 }
 
 function statutPushConfirm(confirmId) {
-  const row = db.prepare('SELECT recu_at FROM push_confirmations WHERE id = ?').get(confirmId);
-  return { recu: !!(row && row.recu_at) };
+  const row = db.prepare('SELECT recu_at, notif_ok, notif_erreur FROM push_confirmations WHERE id = ?').get(confirmId);
+  return {
+    recu: !!(row && row.recu_at),
+    notifOk: row ? row.notif_ok !== 0 : null,
+    notifErreur: row ? row.notif_erreur : null,
+  };
 }
 
 module.exports = { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey, configurerVapid, marquerPushRecu, statutPushConfirm };

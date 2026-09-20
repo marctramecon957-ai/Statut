@@ -424,8 +424,8 @@ app.get('/api/cron/verifier-notifications', async (req, res) => {
 // telephone. Pas d'auth (le service worker n'a pas forcement le cookie de
 // session dans ce contexte) : l'id est un jeton aleatoire non devinable.
 app.post('/api/push-recu', (req, res) => {
-  const { id } = req.body || {};
-  if (id) marquerPushRecu(id);
+  const { id, notifOk, notifErreur } = req.body || {};
+  if (id) marquerPushRecu(id, notifOk, notifErreur);
   res.json({ success: true });
 });
 

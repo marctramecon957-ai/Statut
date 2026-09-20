@@ -711,11 +711,11 @@ async function attendreConfirmationPush(confirmId) {
   for (let i = 0; i < 15; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     try {
-      const { recu } = await api(`/api/push-confirm-statut?id=${encodeURIComponent(confirmId)}`);
-      if (recu) return true;
+      const statut = await api(`/api/push-confirm-statut?id=${encodeURIComponent(confirmId)}`);
+      if (statut.recu) return statut;
     } catch (e) { /* on reessaie */ }
   }
-  return false;
+  return null;
 }
 
 document.getElementById('btnNotif').addEventListener('click', async () => {
@@ -730,9 +730,11 @@ document.getElementById('btnNotif').addEventListener('click', async () => {
       if (resultat.envoyees > 0) {
         if (resultat.confirmIds && resultat.confirmIds.length) {
           alert(`Notification de test envoyée. Vérification en cours pendant 15 secondes pour confirmer qu'elle arrive bien sur ce téléphone...`);
-          const recu = await attendreConfirmationPush(resultat.confirmIds[0]);
-          if (recu) {
-            alert("✅ Confirmé : la notification a bien été reçue sur ce téléphone. Si tu ne l'as pas vue s'afficher, regarde dans le volet de notifications (elle a pu être groupée avec une précédente).");
+          const statut = await attendreConfirmationPush(resultat.confirmIds[0]);
+          if (statut && statut.notifOk) {
+            alert("✅ Confirmé : la notification a bien été reçue ET affichée sans erreur sur ce téléphone. Si tu ne l'as pas vue, regarde dans le volet de notifications (elle a pu être groupée avec une précédente).");
+          } else if (statut && !statut.notifOk) {
+            alert("⚠️ La notification est bien arrivée sur le téléphone, mais son affichage a échoué avec cette erreur exacte :\n\n" + (statut.notifErreur || 'Erreur inconnue') + "\n\nEnvoie-moi ce message pour qu'on corrige le bug.");
           } else {
             alert("❌ La notification a été envoyée par le serveur et acceptée par Google, mais n'est jamais arrivée sur ce téléphone après 15 secondes. Ce n'est donc pas un bug de l'application : c'est un blocage entre ce téléphone et Google (Play Services), indépendant du navigateur utilisé.");
           }
