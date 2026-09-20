@@ -73,6 +73,44 @@ CREATE TABLE IF NOT EXISTS push_envois (
   FOREIGN KEY (subscription_id) REFERENCES push_subscriptions(id) ON DELETE CASCADE,
   UNIQUE(subscription_id, date, cle)
 );
+
+-- Liaison compte <-> discussion Telegram (methode de notification alternative,
+-- moins fragile que le push web car elle passe par l'appli Telegram elle-meme).
+CREATE TABLE IF NOT EXISTS telegram_chats (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE,
+  chat_id TEXT NOT NULL,
+  semaine TEXT NOT NULL DEFAULT 'S1',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Code de liaison temporaire affiche a l'eleve, qu'il envoie au bot pour lier
+-- son compte (evite d'exposer les chat_id ou de deviner qui est qui).
+CREATE TABLE IF NOT EXISTS telegram_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL UNIQUE,
+  code TEXT UNIQUE NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Evite de renvoyer deux fois le meme message Telegram (meme logique que push_envois).
+CREATE TABLE IF NOT EXISTS telegram_envois (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  cle TEXT NOT NULL,
+  envoye_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(chat_id, date, cle)
+);
+
+-- Retient le dernier "update_id" Telegram traite, pour le polling (getUpdates).
+CREATE TABLE IF NOT EXISTS telegram_offset (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  offset_id INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO telegram_offset (id, offset_id) VALUES (1, 0);
 `);
 
 // Migration douce : ajoute la colonne "semaine" si la base existait avant son introduction

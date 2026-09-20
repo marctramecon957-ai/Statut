@@ -1,8 +1,7 @@
 const webpush = require('web-push');
 const db = require('./database');
-
-const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-const HEURE_DEBUT_JOURNEE = 8;
+const { JOURS, maintenantParis, minutesDepuisDebutJournee, creneauxEffectifsDuJour } = require('./horaires');
+const telegram = require('./telegram');
 
 // Tolerance en minutes : le cron externe appelle cette route toutes les
 // ~5 minutes, mais peut avoir du retard (services gratuits). On considere
@@ -23,72 +22,6 @@ function configurerVapid() {
 
 function vapidPublicKey() {
   return process.env.VAPID_PUBLIC_KEY || null;
-}
-
-// Heure/date "maintenant" en fuseau Europe/Paris, quel que soit le fuseau du serveur.
-function maintenantParis() {
-  const maintenant = new Date();
-  const parts = new Intl.DateTimeFormat('fr-FR', {
-    timeZone: 'Europe/Paris',
-    weekday: 'long',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(maintenant);
-
-  const get = (type) => parts.find((p) => p.type === type)?.value || '';
-  const weekdayFr = get('weekday'); // ex: "lundi"
-  const heure = get('hour');
-  const minute = get('minute');
-
-  const joursMap = {
-    lundi: 'Lundi', mardi: 'Mardi', mercredi: 'Mercredi',
-    jeudi: 'Jeudi', vendredi: 'Vendredi', samedi: 'Samedi', dimanche: 'Dimanche',
-  };
-  const jour = joursMap[weekdayFr.toLowerCase()] || null;
-
-  // Date YYYY-MM-DD en fuseau Paris
-  const dateParts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(maintenant);
-
-  return { jour, heureStr: `${heure}:${minute}`, dateStr: dateParts };
-}
-
-function minutesDepuisDebutJournee(heureStr) {
-  const [h, m] = heureStr.split(':').map(Number);
-  return (h - HEURE_DEBUT_JOURNEE) * 60 + m;
-}
-
-function creneauxEffectifsDuJour(jour, dateStr, semaineSouhaitee) {
-  const creneaux = db
-    .prepare(
-      `SELECT c.id, c.heure_debut, c.heure_fin, c.semaine, m.nom AS matiere_nom
-       FROM creneaux c LEFT JOIN matieres m ON m.id = c.matiere_id
-       WHERE c.jour = ?`
-    )
-    .all(jour)
-    .filter((c) => c.semaine === 'Toutes' || c.semaine === semaineSouhaitee);
-
-  const evenements = db
-    .prepare('SELECT * FROM pronote_evenements WHERE date = ? AND jour = ?')
-    .all(dateStr, jour);
-
-  const trouverEvt = (heure_debut, heure_fin) =>
-    evenements.find((e) => e.heure_debut === heure_debut && e.heure_fin === heure_fin) || null;
-
-  return creneaux
-    .map((c) => {
-      const evt = trouverEvt(c.heure_debut, c.heure_fin);
-      if (evt && evt.statut === 'annule') return null;
-      let debut = c.heure_debut;
-      let fin = c.heure_fin;
-      if (evt && evt.statut === 'deplace' && evt.nouvelle_heure_debut) {
-        debut = evt.nouvelle_heure_debut;
-        fin = evt.nouvelle_heure_fin;
-      }
-      return { id: c.id, matiere_nom: c.matiere_nom || 'Sans matière', debut, fin };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.debut.localeCompare(b.debut));
 }
 
 function dejaEnvoye(subscriptionId, dateStr, cle) {
@@ -123,13 +56,9 @@ async function envoyerPush(subscription, payload) {
 }
 
 async function envoyerNotificationTest(userId) {
-  if (!configurerVapid()) {
-    return { envoyees: 0, erreurs: [], erreurGlobale: "Les clés VAPID ne sont pas configurées sur le serveur (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY manquantes)." };
-  }
-  const abonnements = db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(userId);
-  if (abonnements.length === 0) {
-    return { envoyees: 0, erreurs: [], erreurGlobale: "Aucun abonnement push trouvé côté serveur pour ce compte. Réactive les notifications avec le bouton 🔔." };
-  }
+  const abonnements = configurerVapid()
+    ? db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(userId)
+    : [];
 
   let envoyees = 0;
   const erreurs = [];
@@ -138,10 +67,27 @@ async function envoyerNotificationTest(userId) {
     if (resultat.ok) {
       envoyees++;
     } else {
-      erreurs.push(`Statut ${resultat.statusCode || '?'} : ${resultat.message || 'erreur inconnue'}`);
+      erreurs.push(`Push : statut ${resultat.statusCode || '?'} : ${resultat.message || 'erreur inconnue'}`);
     }
   }
-  return { envoyees, erreurs, total: abonnements.length };
+
+  const telegramLie = telegram.chatLiePour(userId);
+  let telegramOk = false;
+  if (telegramLie) {
+    const resultatTg = await telegram.envoyerMessage(telegramLie.chat_id, 'Notification de test 🎉\nSi tu vois ceci, les notifications Telegram fonctionnent.');
+    if (resultatTg.ok) {
+      telegramOk = true;
+      envoyees++;
+    } else {
+      erreurs.push(`Telegram : ${resultatTg.message || 'erreur inconnue'}`);
+    }
+  }
+
+  if (abonnements.length === 0 && !telegramLie) {
+    return { envoyees: 0, erreurs: [], erreurGlobale: "Aucun moyen de notification n'est lié à ce compte (ni push, ni Telegram). Réactive-en un dans l'app." };
+  }
+
+  return { envoyees, erreurs, total: abonnements.length + (telegramLie ? 1 : 0), telegramOk, telegramLie: !!telegramLie };
 }
 
 async function envoyerNotificationInstantanee({ jour, dateStr, semaine, statut, matiere_nom, heure_debut, heure_fin, nouvelle_heure_debut, nouvelle_heure_fin }) {
@@ -176,77 +122,83 @@ async function envoyerNotificationInstantanee({ jour, dateStr, semaine, statut, 
     const { ok } = await envoyerPush(sub, { title: titre, body: corps, tag: `instant-${statut}` });
     if (ok) envoyees++;
   }
+
+  const chatsTelegram = telegram
+    .tousLesChatsLies()
+    .filter((chat) => semaine === 'Toutes' || chat.semaine === semaine);
+  for (const chat of chatsTelegram) {
+    const { ok } = await telegram.envoyerMessage(chat.chat_id, `${titre}\n${corps}`);
+    if (ok) envoyees++;
+  }
+
   return { envoyees };
 }
 
-async function verifierEtEnvoyerNotifications() {
-  if (!configurerVapid()) {
-    return { envoyees: 0, erreur: 'VAPID non configure' };
-  }
+// Calcule, pour un jour/heure donnes, les 3 evenements (debut/fin/trou) a
+// eventuellement notifier pour un ensemble de creneaux, sans envoyer.
+function evenementsANotifier(cours, nowMin) {
+  const evts = [];
+  for (let i = 0; i < cours.length; i++) {
+    const c = cours[i];
+    const debutMin = minutesDepuisDebutJournee(c.debut);
+    const finMin = minutesDepuisDebutJournee(c.fin);
+    const suivant = cours[i + 1];
+    const trouMin = suivant ? minutesDepuisDebutJournee(suivant.debut) - finMin : null;
 
+    if (nowMin >= debutMin && nowMin < debutMin + FENETRE_MIN) {
+      evts.push({ cle: `debut-${c.id}-${c.debut}`, titre: 'Ton cours commence', corps: `${c.matiere_nom} à ${c.debut}` });
+    }
+
+    if (nowMin >= finMin && nowMin < finMin + FENETRE_MIN && !(trouMin !== null && trouMin >= 60)) {
+      const corps = suivant
+        ? `${c.matiere_nom} se termine à ${c.fin}. Prochain cours : ${suivant.matiere_nom} à ${suivant.debut}.`
+        : `${c.matiere_nom} se termine à ${c.fin}. Plus de cours aujourd'hui.`;
+      evts.push({ cle: `fin-${c.id}-${c.fin}`, titre: 'Ton cours se termine', corps });
+    }
+
+    if (nowMin >= finMin && nowMin < finMin + FENETRE_MIN && trouMin !== null && trouMin >= 60) {
+      const h = Math.floor(trouMin / 60);
+      const m = trouMin % 60;
+      const dureeTxt = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
+      evts.push({
+        cle: `trou-${c.id}-${c.fin}`,
+        titre: "Trou dans l'emploi du temps",
+        corps: `${dureeTxt} de libre avant ${suivant.matiere_nom} à ${suivant.debut}.`,
+      });
+    }
+  }
+  return evts;
+}
+
+async function verifierEtEnvoyerNotifications() {
   const { jour, heureStr, dateStr } = maintenantParis();
   if (!jour || jour === 'Dimanche' || !JOURS.includes(jour)) {
     return { envoyees: 0, info: 'Pas de cours ce jour' };
   }
   const nowMin = minutesDepuisDebutJournee(heureStr);
-
-  const abonnements = db.prepare('SELECT * FROM push_subscriptions').all();
   let envoyees = 0;
 
-  for (const sub of abonnements) {
-    const cours = creneauxEffectifsDuJour(jour, dateStr, sub.semaine || 'S1');
-
-    for (let i = 0; i < cours.length; i++) {
-      const c = cours[i];
-      const debutMin = minutesDepuisDebutJournee(c.debut);
-      const finMin = minutesDepuisDebutJournee(c.fin);
-      const suivant = cours[i + 1];
-      const trouMin = suivant ? minutesDepuisDebutJournee(suivant.debut) - finMin : null;
-
-      // Debut de cours
-      if (nowMin >= debutMin && nowMin < debutMin + FENETRE_MIN) {
-        const cle = `debut-${c.id}-${c.debut}`;
-        if (!dejaEnvoye(sub.id, dateStr, cle)) {
-          const { ok } = await envoyerPush(sub, {
-            title: 'Ton cours commence',
-            body: `${c.matiere_nom} à ${c.debut}`,
-          });
+  if (configurerVapid()) {
+    const abonnements = db.prepare('SELECT * FROM push_subscriptions').all();
+    for (const sub of abonnements) {
+      const cours = creneauxEffectifsDuJour(jour, dateStr, sub.semaine || 'S1');
+      for (const evt of evenementsANotifier(cours, nowMin)) {
+        if (!dejaEnvoye(sub.id, dateStr, evt.cle)) {
+          const { ok } = await envoyerPush(sub, { title: evt.titre, body: evt.corps });
           if (ok) envoyees++;
-          marquerEnvoye(sub.id, dateStr, cle);
+          marquerEnvoye(sub.id, dateStr, evt.cle);
         }
       }
+    }
+  }
 
-      // Fin de cours (uniquement si ce n'est pas suivi d'un trou notifie a part,
-      // pour eviter d'envoyer deux notifications au meme moment)
-      if (nowMin >= finMin && nowMin < finMin + FENETRE_MIN && !(trouMin !== null && trouMin >= 60)) {
-        const cle = `fin-${c.id}-${c.fin}`;
-        if (!dejaEnvoye(sub.id, dateStr, cle)) {
-          const corps = suivant
-            ? `${c.matiere_nom} se termine à ${c.fin}. Prochain cours : ${suivant.matiere_nom} à ${suivant.debut}.`
-            : `${c.matiere_nom} se termine à ${c.fin}. Plus de cours aujourd'hui.`;
-          const { ok } = await envoyerPush(sub, {
-            title: 'Ton cours se termine',
-            body: corps,
-          });
-          if (ok) envoyees++;
-          marquerEnvoye(sub.id, dateStr, cle);
-        }
-      }
-
-      // Trou d'1h ou plus avant le prochain cours
-      if (nowMin >= finMin && nowMin < finMin + FENETRE_MIN && trouMin !== null && trouMin >= 60) {
-        const cle = `trou-${c.id}-${c.fin}`;
-        if (!dejaEnvoye(sub.id, dateStr, cle)) {
-          const h = Math.floor(trouMin / 60);
-          const m = trouMin % 60;
-          const dureeTxt = m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
-          const { ok } = await envoyerPush(sub, {
-            title: "Trou dans l'emploi du temps",
-            body: `${dureeTxt} de libre avant ${suivant.matiere_nom} à ${suivant.debut}.`,
-          });
-          if (ok) envoyees++;
-          marquerEnvoye(sub.id, dateStr, cle);
-        }
+  for (const chat of telegram.tousLesChatsLies()) {
+    const cours = creneauxEffectifsDuJour(jour, dateStr, chat.semaine || 'S1');
+    for (const evt of evenementsANotifier(cours, nowMin)) {
+      if (!telegram.dejaEnvoye(chat.chat_id, dateStr, evt.cle)) {
+        const { ok } = await telegram.envoyerMessage(chat.chat_id, `${evt.titre}\n${evt.corps}`);
+        if (ok) envoyees++;
+        telegram.marquerEnvoye(chat.chat_id, dateStr, evt.cle);
       }
     }
   }

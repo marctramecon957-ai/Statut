@@ -245,12 +245,19 @@ document.getElementById('weekToggle').addEventListener('click', (e) => {
 async function mettreAJourSemaineAbonnement() {
   try {
     const abonnement = await abonnementPushActuel();
-    if (!abonnement) return;
-    await api('/api/push-subscribe', {
-      method: 'POST',
-      body: JSON.stringify({ subscription: abonnement.toJSON(), semaine: state.semaineActive }),
-    });
+    if (abonnement) {
+      await api('/api/push-subscribe', {
+        method: 'POST',
+        body: JSON.stringify({ subscription: abonnement.toJSON(), semaine: state.semaineActive }),
+      });
+    }
   } catch (e) { /* pas grave si ca echoue */ }
+  try {
+    await api('/api/telegram/semaine', {
+      method: 'POST',
+      body: JSON.stringify({ semaine: state.semaineActive }),
+    });
+  } catch (e) { /* pas grave si pas lie / pas configure */ }
 }
 
 function syncWeekToggleUI() {
@@ -663,6 +670,41 @@ async function activerNotificationsPush() {
     body: JSON.stringify({ subscription: abonnement.toJSON(), semaine: state.semaineActive }),
   });
 }
+
+// ================= NOTIFICATIONS TELEGRAM (alternative au push, plus fiable) =================
+// Le push web depend de reglages Android/navigateur parfois capricieux ; Telegram
+// passe par sa propre appli, qui a son propre canal de notifications independant.
+
+document.getElementById('btnTelegram').addEventListener('click', async () => {
+  const btn = document.getElementById('btnTelegram');
+  try {
+    const statut = await api('/api/telegram/statut');
+    if (!statut.configure) {
+      alert("Les notifications Telegram ne sont pas encore configurées sur ce serveur.");
+      return;
+    }
+    if (statut.lie) {
+      const resultat = await api('/api/telegram/test', { method: 'POST' });
+      if (resultat.ok) {
+        alert('Message de test envoyé sur Telegram. Il devrait arriver dans quelques secondes.');
+      } else {
+        alert('Échec de l\'envoi Telegram : ' + (resultat.message || 'erreur inconnue') + '\n\nSi tu as bloqué ou supprimé le chat avec le bot, clique de nouveau sur ce bouton pour le relier.');
+      }
+      return;
+    }
+    if (!statut.botUsername) {
+      alert("Impossible de récupérer le nom du bot Telegram pour l'instant. Réessaie dans un instant.");
+      return;
+    }
+    const lien = `https://t.me/${statut.botUsername}?start=${statut.code}`;
+    const ouvrir = confirm(
+      `Pour recevoir tes notifications sur Telegram :\n\n1. Clique sur OK pour ouvrir Telegram\n2. Appuie sur "Démarrer" dans la discussion avec le bot\n\n(Si Telegram ne s'ouvre pas automatiquement, envoie ce message au bot @${statut.botUsername} : /lier ${statut.code})`
+    );
+    if (ouvrir) window.open(lien, '_blank');
+  } catch (err) {
+    alert("Erreur : " + err.message);
+  }
+});
 
 document.getElementById('btnNotif').addEventListener('click', async () => {
   if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {

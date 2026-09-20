@@ -239,6 +239,38 @@ appareil : à refaire sur chaque téléphone/navigateur où tu veux être notifi
 avant que les notifications push fonctionnent — c'est une restriction
 d'Apple, pas de ce projet.
 
+## 4quater. Notifications Telegram (alternative plus fiable)
+
+Le push web dépend de réglages Android/navigateur parfois capricieux
+(canaux de notification par site, mise en veille agressive de certains
+téléphones...). Les notifications Telegram évitent ce problème : elles
+passent par l'appli Telegram elle-même, avec son propre système de
+notifications indépendant du navigateur.
+
+### A. Créer le bot (une seule fois, ~2 minutes)
+
+1. Sur Telegram, cherche **@BotFather** (le bot officiel qui crée des bots)
+   et démarre une discussion avec lui.
+2. Envoie `/newbot`, puis choisis un nom et un nom d'utilisateur pour ton
+   bot (doit finir par "bot", ex. `EmploiDuTempsLyceeBot`).
+3. BotFather te donne un **token** du type
+   `123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`. Copie-le.
+4. Sur Render, va dans **Environment** et ajoute la variable
+   `TELEGRAM_BOT_TOKEN` avec ce token. Redéploie.
+
+### B. Activer côté élève/admin
+
+Clique sur **📨 Notifications Telegram** dans l'app. Un message te propose
+d'ouvrir Telegram et de démarrer la discussion avec le bot — accepte, appuie
+sur "Démarrer", et c'est lié automatiquement. Reclique sur le bouton à tout
+moment pour envoyer un message de test.
+
+Aucune configuration supplémentaire n'est nécessaire côté cron : le même
+appel toutes les 5 minutes (voir section précédente) vérifie aussi les
+messages Telegram entrants et envoie les notifications Telegram.
+
+Tu peux activer le push **et** Telegram en même temps si tu veux les deux.
+
 ## 5. Structure du projet
 
 ```

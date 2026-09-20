@@ -8,6 +8,7 @@ const multer = require('multer');
 const { analyserPdf } = require('./db/pdf-extract');
 const { lancerSynchronisation, obtenirStatutSync, demarrerSyncPeriodique } = require('./db/pronote-sync');
 const { verifierEtEnvoyerNotifications, envoyerNotificationInstantanee, envoyerNotificationTest, vapidPublicKey } = require('./db/notifications');
+const telegram = require('./db/telegram');
 const db = require('./db/database');
 
 // S'assure que le compte admin par defaut existe
@@ -410,11 +411,48 @@ app.get('/api/cron/verifier-notifications', async (req, res) => {
     return res.status(403).json({ error: 'Secret invalide' });
   }
   try {
+    await telegram.traiterMessagesEntrants();
     const resultat = await verifierEtEnvoyerNotifications();
     res.json(resultat);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ---------- NOTIFICATIONS TELEGRAM (alternative au push, moins fragile) ----------
+
+// Renvoie l'etat de liaison de l'utilisateur connecte, et un code de liaison
+// s'il n'est pas encore lie (a envoyer au bot avec "/lier CODE").
+app.get('/api/telegram/statut', requireAuth, async (req, res) => {
+  if (!telegram.estConfigure()) {
+    return res.status(503).json({ configure: false, error: "Le bot Telegram n'est pas configuré sur le serveur" });
+  }
+  const chat = telegram.chatLiePour(req.session.user.id);
+  if (chat) {
+    return res.json({ configure: true, lie: true, semaine: chat.semaine });
+  }
+  const code = telegram.codePour(req.session.user.id);
+  const username = await telegram.botUsername();
+  res.json({ configure: true, lie: false, code, botUsername: username });
+});
+
+app.post('/api/telegram/delier', requireAuth, (req, res) => {
+  telegram.delierPour(req.session.user.id);
+  res.json({ success: true });
+});
+
+app.post('/api/telegram/semaine', requireAuth, (req, res) => {
+  const { semaine } = req.body;
+  if (semaine !== 'S1' && semaine !== 'S2') return res.status(400).json({ error: 'semaine invalide' });
+  telegram.majSemaine(req.session.user.id, semaine);
+  res.json({ success: true });
+});
+
+app.post('/api/telegram/test', requireAuth, async (req, res) => {
+  const chat = telegram.chatLiePour(req.session.user.id);
+  if (!chat) return res.status(400).json({ error: 'Aucun chat Telegram lié à ce compte' });
+  const resultat = await telegram.envoyerMessage(chat.chat_id, 'Notification de test 🎉\nSi tu vois ceci, les notifications Telegram fonctionnent.');
+  res.json(resultat);
 });
 
 // ---------- Pages ----------
