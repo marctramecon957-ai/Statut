@@ -718,7 +718,7 @@ document.getElementById('btnNotif').addEventListener('click', async () => {
       if (resultat.envoyees > 0) {
         alert(`Notification de test envoyée (${resultat.envoyees}/${resultat.total}). Elle devrait arriver dans quelques secondes, même si tu fermes l'application.`);
       } else if (resultat.erreurGlobale) {
-        if (/[Aa]bonnement/.test(resultat.erreurGlobale) && !/VAPID/.test(resultat.erreurGlobale)) {
+        if (!/VAPID/.test(resultat.erreurGlobale)) {
           await dejaAbonne.unsubscribe().catch(() => {});
           await activerNotificationsPush();
           await mettreAJourBoutonNotif();
